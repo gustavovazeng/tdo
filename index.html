@@ -757,6 +757,78 @@ function extractNamePrefix(s){
   const m=v.match(/^(.+?)_?id_?\d{10,}$/);
   return m?m[1]:(v||null);
 }
+// ── Pontuação e faixa da pesquisa (cálculo próprio) ───────────────────────
+// As colunas "faixa" e "score_total" da Base leads são IGNORADAS de
+// propósito: a planilha usa uma tabela de pontos desatualizada (Empresário
+// 52,00 · Parcialmente 23,51 · Doutorado 31,24) e não classifica A+, o que
+// jogava toda lead de A+ dentro de A. Aqui o score é recalculado do zero a
+// partir das 10 respostas da pesquisa, com a tabela oficial abaixo, e a
+// faixa sai desse score. Isso vale pra TODA métrica de faixa do dashboard
+// (tabelas, gráficos diários, Resumo diário, campanhas e anúncios).
+const SCORE_PONTOS = {
+  idade:{"18-24":7.13,"25-35":14.78,"36-45":19.25,"46-55":18.55,"56 ou mais":14.6},
+  escolaridade:{"ensino fundamental 1 (1o ao 5o ano)":6.42,"ensino fundamental 2 (6o ao 9o ano)":7.64,
+    "ensino medio (1o ao 3o)":8.88,"ensino superior incompleto":14.1,
+    "ensino superior (graduacao/faculdade)":20.95,"pos-graduacao":23.97,"mestrado":37.31,"doutorado":37.24},
+  sexo:{"sou do sexo feminino":12.86,"sou do sexo masculino":22.18},
+  filhos:{"nao":18.83,"sim":14.68},
+  renda:{"ate r$ 1.000,00":6.86,"de r$ 1.101,00 a r$ 2.500,00":9.82,"de r$ 2.501,00 a r$ 4.000,00":16.21,
+    "de r$ 4.001,00 a r$ 10.000,00":25.55,"acima de r$ 10.000,00":40.83},
+  trabalho:{"autonomo":20.61,"empresario":46.88,"funcionario publico":10.4,"funcionario clt":8.15,
+    "aposentado":10.26,"funcionario pj":20.61,"estou desempregado no momento":10.44,"profissional liberal":31.52},
+  solidao:{"nunca":6.73,"raramente":11.39,"as vezes":13.96,"frequentemente":22.26,"sempre":20.94},
+  terapia:{"nao":8.31,"sim":29.04},
+  eficaz:{"nunca fiz":11.24,"nao":16.32,"sim":13.89,"parcialmente":26.51},
+};
+// Estado civil casa por PREFIXO: a tabela oficial escreve "Solteira(o)" e a
+// Base leads grava "Solteiro(o)" — o prefixo pega as duas grafias.
+const SCORE_CIVIL = [["solteir",14.39],["casad",14.57],["separad",19.99],["viuv",14.63]];
+// Colunas da Base leads que alimentam cada bloco de pontos.
+const SCORE_COLS = {
+  idade:"Em qual faixa etária você se encaixa?",
+  escolaridade:"Qual é o seu nível de escolaridade?",
+  sexo:"Qual seu sexo?",
+  filhos:"Você tem filhos?",
+  renda:"Qual das opções representa a sua renda mensal hoje?",
+  trabalho:"Você trabalha como (marque o trabalho que te gera mais renda):",
+  solidao:"Com que frequência você se sente sozinho(a)/travado(a) e com baixos resultados?",
+  terapia:"Você já buscou algum tipo de ajuda ou suporte (terapia, coaching, grupos de apoio) para lidar com seus desafios emocionais?",
+  eficaz:"Se sim, o método utilizado foi eficaz?",
+};
+const SCORE_COL_CIVIL = "Qual seu estado civil?";
+// NFKD + remoção de acentos: "Ensino Médio (1º ao 3º)" → "ensino medio (1o ao 3o)".
+// Deixa o cruzamento imune a acento, caixa, espaço duplo e ao indicador
+// ordinal (º), que é o que mais varia entre exportações da planilha.
+function normResposta(s){
+  return String(s||"").normalize("NFKD").replace(/[\u0300-\u036f]/g,"")
+    .toLowerCase().replace(/\s+/g," ").trim();
+}
+// Soma dos pontos das 10 respostas. Devolve null se QUALQUER resposta
+// estiver ausente ou não reconhecida — lead sem pesquisa completa não recebe
+// faixa e fica fora do denominador (mesmo critério de antes).
+function scoreLead(r){
+  let total=0;
+  for(const k in SCORE_COLS){
+    const pt=SCORE_PONTOS[k][normResposta(r[SCORE_COLS[k]])];
+    if(pt==null)return null;
+    total+=pt;
+  }
+  const civ=normResposta(r[SCORE_COL_CIVIL]);
+  const hit=SCORE_CIVIL.find(([pre])=>civ.startsWith(pre));
+  if(!hit)return null;
+  total+=hit[1];
+  return Math.round(total*100)/100;
+}
+// Cortes oficiais das faixas. Limite INFERIOR inclusivo, superior exclusivo —
+// é isso que garante que cada lead caia em uma única faixa, sem sobreposição
+// nas bordas (ex.: 180,3 exato é A, nunca B; 204,2 exato é A+, nunca A).
+const FAIXA_CORTES = [["A+",204.2],["A",180.3],["B",162.7],["C",136.3],["D",124.9],["E",0]];
+function faixaFromScore(score){
+  if(score==null)return "";
+  const hit=FAIXA_CORTES.find(([,min])=>score>=min);
+  return hit?hit[0]:"";
+}
+
 // Temperatura do público vem no NOME DA CAMPANHA (ex.: "...-conversao-quente-...",
 // "...-conversao-frio-faixaAB_2.0-leva01") — não no campo "temperature_name" da
 // Base leads, que nesta base vem sempre "Frio" independente da campanha real.
@@ -1220,12 +1292,16 @@ async function loadData(){
       const utmSourceRaw=(r["utm_source"]||"").trim();
       const hasUtm=utmSourceRaw.length>0;
       const channel=(!hasUtm||utmSourceRaw.startsWith("FBAds"))?"trafego":"organico";
+      const scoreQuiz=scoreLead(r);
 
       leadsRowsAll.push({
         date,ms,
         path:(r["path"]||"").trim(), // página onde a lead se cadastrou (bate com "Page Path" da Base GA4)
         quizOk:(r["Quiz respondido?"]||"").trim()==="Sim",
-        faixa:(r["faixa"]||"").trim(),
+        // faixa/score recalculados aqui (ver scoreLead/faixaFromScore) —
+        // as colunas "faixa" e "score_total" da planilha são ignoradas.
+        faixa:faixaFromScore(scoreQuiz),
+        score:scoreQuiz,
         name:(r["name"]||"").trim(),
         email:normalizeEmail(r["person_email"]), // já normalizado — usado tb como chave de dedup
         phone:normalizePhone(r["person_phone"]), // já normalizado — usado tb como chave de dedup
