@@ -736,13 +736,26 @@ function parseStageRows(rowsRaw){
 // — Leads e Faixas ficavam sempre vazios nas tabelas de Campanhas/Anúncios,
 // mesmo com dado nas duas planilhas. "_?" nas pontas mantém compatibilidade
 // com um formato antigo sem underscore, se aparecer.
+// BUG 2 (tdo_ago26): a exportação da Base leads vem com um byte corrompido
+// no FIM de todo utm_content — ex.: "tdo_ago26-leads-adv011_id_120252161502030421\uFFFD".
+// Como os dois regex abaixo ancoram no fim da string ($), esse caractere
+// invisível fazia extractIdSuffix() devolver null pras 500 leads e o nome do
+// anúncio virar a UTM inteira (com o lixo junto) — nenhum nome batia com a
+// Base Meta e a tabela de Anúncios ficava com Leads = 0 em todas as linhas.
+// (utm_medium vem limpo, por isso a tabela de Campanhas funcionava.)
+// cleanUtm() apara do fim qualquer caractere de substituição/controle/espaço
+// antes de aplicar os regex.
+function cleanUtm(s){
+  return String(s||"").replace(/[\uFFFD\u0000-\u001F\u007F-\u009F\s]+$/,"").trim();
+}
 function extractIdSuffix(s){
-  const m=String(s||"").match(/_?id_?(\d{10,})$/);
+  const m=cleanUtm(s).match(/_?id_?(\d{10,})$/);
   return m?m[1]:null;
 }
 function extractNamePrefix(s){
-  const m=String(s||"").match(/^(.+?)_?id_?\d{10,}$/);
-  return m?m[1]:(s||null);
+  const v=cleanUtm(s);
+  const m=v.match(/^(.+?)_?id_?\d{10,}$/);
+  return m?m[1]:(v||null);
 }
 // Temperatura do público vem no NOME DA CAMPANHA (ex.: "...-conversao-quente-...",
 // "...-conversao-frio-faixaAB_2.0-leva01") — não no campo "temperature_name" da
