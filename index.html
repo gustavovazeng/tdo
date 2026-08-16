@@ -1584,6 +1584,13 @@ function getMetaRowsInRange(start,end){
 function getLeadsRowsForCamp(start,end,campName){
   return S.leadsRows.filter(l=>l.date>=start&&l.date<=end&&l.campName===campName);
 }
+// Mesma coisa, mas na base SEM dedup — usada só pro GAP: o gerenciador do
+// Meta (actionLeads) não deduplica por contato, então comparar contra a
+// contagem já deduplicada infla o GAP artificialmente. Mesmo critério do
+// GAP diário da aba Principal (ver getDaily).
+function getLeadsRawForCamp(start,end,campName){
+  return S.leadsRowsRaw.filter(l=>l.date>=start&&l.date<=end&&l.campName===campName);
+}
 function getLeadsRowsForAd(start,end,adName,campFilter){
   return S.leadsRows.filter(l=>{
     if(l.date<start||l.date>end)return false;
@@ -1602,6 +1609,18 @@ function qualityFromLeadsArray(leadsArr){
   const faixaPcts=Object.fromEntries(FAIXA_LETTERS.map(l=>[FAIXA_FIELD_KEY[l],faixaPct(l)]));
   return{quizPct,...faixaPcts};
 }
+// Célula do GAP na tabela de campanhas: verde até 20%, amarelo até 50%,
+// vermelho acima disso — quanto MENOR o GAP, melhor (gerenciador e planilha
+// batendo). Negativo (planilha com mais leads que o gerenciador) é tratado
+// pelo módulo: o que importa é a distância de zero. O title do <td> mostra a
+// conta por trás (gerenciador × planilha sem dedup).
+function gapTd(gapPct,actionLeads,leadsRaw){
+  if(gapPct==null)return `<td class="mono" style="text-align:right;color:var(--hint)">—</td>`;
+  const abs=Math.abs(gapPct);
+  const cor=abs<=20?"#34d399":abs<=50?"#fbbf24":"#f87171";
+  const sinal=gapPct>0?"+":"";
+  return `<td class="mono" style="text-align:right;color:${cor}" title="gerenciador: ${actionLeads} · planilha (sem dedup): ${leadsRaw}">${sinal}${fPct(gapPct)}</td>`;
+}
 function getCampRows(start,end){
   const rows=getMetaRowsInRange(start,end);
   const byCamp={};
@@ -1614,7 +1633,12 @@ function getCampRows(start,end){
     const leadsArr=getLeadsRowsForCamp(start,end,c.campName);
     const leads=leadsArr.length;
     const q=qualityFromLeadsArray(leadsArr);
-    return {...c,leads,...q,
+    // GAP % = (leads do gerenciador − leads reais sem dedup) ÷ leads reais.
+    // Positivo = o Meta reportou mais do que caiu na planilha. null quando
+    // não há lead real no período (divisão por zero).
+    const leadsRaw=getLeadsRawForCamp(start,end,c.campName).length;
+    const gapPct=leadsRaw>0?((c.actionLeads-leadsRaw)/leadsRaw)*100:null;
+    return {...c,leads,leadsRaw,gapPct,...q,
       cpc:c.clicks>0?c.spend/c.clicks:0, ctr:c.impressions>0?(c.clicks/c.impressions)*100:0,
       cpm:c.impressions>0?(c.spend/c.impressions)*1000:0, cpl:leads>0?c.spend/leads:0};
   });
@@ -2408,8 +2432,15 @@ function renderAnuncios(){
   const _cq=S.campSearch.trim().toLowerCase();
   const campRows=_cq?campRowsAll.filter(c=>c.campName.toLowerCase().includes(_cq)):campRowsAll;
   const {col:cCol,dir:cDir}=S.cSort;
+  // Ordenação: null vai SEMPRE pro fim, independente da direção. Sem isso o
+  // "??0" antigo fazia campanha sem dado (GAP/faixa nulos) aparecer como se
+  // fosse zero — ou seja, uma campanha sem nenhuma lead subia pro topo do
+  // GAP como se estivesse perfeitamente casada com o gerenciador.
   const sortedCamps=[...campRows].sort((a,b)=>{
-    const av=a[cCol]??0,bv=b[cCol]??0;
+    const av=a[cCol],bv=b[cCol];
+    if(av==null&&bv==null)return 0;
+    if(av==null)return 1;
+    if(bv==null)return -1;
     if(typeof av==="string")return cDir==="asc"?av.localeCompare(bv):bv.localeCompare(av);
     return cDir==="asc"?av-bv:bv-av;
   });
@@ -2481,9 +2512,10 @@ function renderAnuncios(){
           ${thC("cpm","CPM",true)}
           ${thC("cpc","CPC",true)}
           ${thC("ctr","CTR",true)}
+          ${thC("gapPct","GAP",true)}
         </tr></thead>
         <tbody>
-          ${sortedCamps.length===0?`<tr><td colspan="15" style="text-align:center;color:var(--hint);padding:20px">Sem dados de campanhas no período</td></tr>`:
+          ${sortedCamps.length===0?`<tr><td colspan="16" style="text-align:center;color:var(--hint);padding:20px">Sem dados de campanhas no período</td></tr>`:
           sortedCamps.map(c=>{
             const sel=S.selectedCamps.has(c.campName);
             return `<tr onclick="toggleCamp('${escName(c.campName)}')" style="cursor:pointer;background:${sel?"rgba(16,185,129,.1)":"transparent"}">
@@ -2502,6 +2534,7 @@ function renderAnuncios(){
               <td class="mono" style="text-align:right">${fBRL(c.cpm)}</td>
               <td class="mono" style="text-align:right">${fBRL(c.cpc)}</td>
               <td class="mono" style="text-align:right">${fPct(c.ctr)}</td>
+              ${gapTd(c.gapPct,c.actionLeads,c.leadsRaw)}
             </tr>`;
           }).join("")}
         </tbody>
