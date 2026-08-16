@@ -1609,15 +1609,15 @@ function qualityFromLeadsArray(leadsArr){
   const faixaPcts=Object.fromEntries(FAIXA_LETTERS.map(l=>[FAIXA_FIELD_KEY[l],faixaPct(l)]));
   return{quizPct,...faixaPcts};
 }
-// Célula do GAP na tabela de campanhas: verde até 20%, amarelo até 50%,
-// vermelho acima disso — quanto MENOR o GAP, melhor (gerenciador e planilha
+// Célula do GAP na tabela de campanhas: verde até 10%, amarelo de 10% a 20%,
+// vermelho acima de 20% — quanto MENOR o GAP, melhor (gerenciador e planilha
 // batendo). Negativo (planilha com mais leads que o gerenciador) é tratado
 // pelo módulo: o que importa é a distância de zero. O title do <td> mostra a
 // conta por trás (gerenciador × planilha sem dedup).
 function gapTd(gapPct,actionLeads,leadsRaw){
   if(gapPct==null)return `<td class="mono" style="text-align:right;color:var(--hint)">—</td>`;
   const abs=Math.abs(gapPct);
-  const cor=abs<=20?"#34d399":abs<=50?"#fbbf24":"#f87171";
+  const cor=abs<=10?"#34d399":abs<=20?"#fbbf24":"#f87171";
   const sinal=gapPct>0?"+":"";
   return `<td class="mono" style="text-align:right;color:${cor}" title="gerenciador: ${actionLeads} · planilha (sem dedup): ${leadsRaw}">${sinal}${fPct(gapPct)}</td>`;
 }
