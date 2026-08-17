@@ -270,19 +270,27 @@ const FUNIS = {
     metaCarrinhoCustoFichaComPreco:40,
     // Planejamento diário — Captação de 13/08 a 24/08. "leads" recalculado a
     // partir do investimento diário ÷ meta de CPL (leads = round(inv/6.50)).
+    // Planejamento refeito em 17/08: R$ 450.000 no total da captação.
+    // Curva de crescimento CONSTANTE (~43%/dia) de hoje até o pico, que
+    // vira um platô de 2 dias (22 e 23/08 iguais), e 24/08 a 70% do platô.
+    // A taxa é alta porque restam R$ 403.804 para 7 dias partindo de uma
+    // base de R$ 15.000 — crescimento constante dilui isso sem nenhum
+    // degrau isolado maior que os demais.
+    // Os dias 13→16 são o REALIZADO e 17/08 são os R$ 15.000 definidos.
+    // "leads" = investimento ÷ meta de CPL (R$ 6,50).
     planoDiario:[
-      {date:"2026-08-13", investimento:3476,  leads:535},
-      {date:"2026-08-14", investimento:4171,  leads:642},
-      {date:"2026-08-15", investimento:5005,  leads:770},
-      {date:"2026-08-16", investimento:6007,  leads:924},
-      {date:"2026-08-17", investimento:7208,  leads:1109},
-      {date:"2026-08-18", investimento:8649,  leads:1331},
-      {date:"2026-08-19", investimento:10379,  leads:1597},
-      {date:"2026-08-20", investimento:12455,  leads:1916},
-      {date:"2026-08-21", investimento:14946,  leads:2299},
-      {date:"2026-08-22", investimento:14946,  leads:2299},
-      {date:"2026-08-23", investimento:14946,  leads:2299},
-      {date:"2026-08-24", investimento:7811,  leads:1202},
+      {date:"2026-08-13", investimento:0, leads:0},
+      {date:"2026-08-14", investimento:20727.04, leads:3189},
+      {date:"2026-08-15", investimento:5478.8, leads:843},
+      {date:"2026-08-16", investimento:4989.99, leads:768},
+      {date:"2026-08-17", investimento:15000, leads:2308},
+      {date:"2026-08-18", investimento:21308.05, leads:3278},
+      {date:"2026-08-19", investimento:30800, leads:4738},
+      {date:"2026-08-20", investimento:44100, leads:6785},
+      {date:"2026-08-21", investimento:63200, leads:9723},
+      {date:"2026-08-22", investimento:90517.08, leads:13926},
+      {date:"2026-08-23", investimento:90517.08, leads:13926},
+      {date:"2026-08-24", investimento:63361.96, leads:9748},
     ],
     // Aquecimento e Lembrete rodam na mesma semana (17/08→23/08), Aulas
     // gratuitas em 24-26/08, Carrinho de 27/08 a 03/09.
