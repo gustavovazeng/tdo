@@ -1322,6 +1322,11 @@ async function loadData(){
         filhos:(r["Você tem filhos?"]||"").trim(),
         renda:(r["Qual das opções representa a sua renda mensal hoje?"]||"").trim(),
         trabalho:(r["Você trabalha como (marque o trabalho que te gera mais renda):"]||"").trim(),
+        // 3 perguntas da pesquisa usadas na aba Análise qualificação (e no
+        // score/faixa) — nomes de coluna reaproveitados de SCORE_COLS.
+        solidao:(r[SCORE_COLS.solidao]||"").trim(),
+        terapia:(r[SCORE_COLS.terapia]||"").trim(),
+        eficaz:(r[SCORE_COLS.eficaz]||"").trim(),
       });
     }
     const leadsRows=dedupByContact(leadsRowsAll);
@@ -2649,11 +2654,13 @@ function renderLeads(){
   const origemCounts=distinctCount(rows,"utmSource").slice(0,10);
   const maxOrigem=origemCounts.length?origemCounts[0][1]:1;
 
-  function demoBlock(title,key){
+  // tip = enunciado completo da pergunta, mostrado no hover — os títulos das
+  // 3 tabelas da pesquisa são encurtados pra caber no cabeçalho do bloco.
+  function demoBlock(title,key,tip){
     const counts=distinctCount(quizRows,key).slice(0,8);
     const maxV=counts.length?counts[0][1]:1;
     return `<div class="cc">
-      <div class="ch"><span class="ct">${title}</span></div>
+      <div class="ch"><span class="ct"${tip?` title="${tip.replace(/"/g,"&quot;")}" style="cursor:help;border-bottom:1px dotted var(--hint)"`:""}>${title}</span></div>
       ${counts.map(([k,n])=>barRow(k,n,quizRows.length,"#60a5fa")).join("")}
     </div>`;
   }
@@ -2696,6 +2703,9 @@ function renderLeads(){
       ${demoBlock("Escolaridade","escolaridade")}
       ${demoBlock("Renda mensal","renda")}
       ${demoBlock("Ocupação","trabalho")}
+      ${demoBlock("Sente sozinho?","solidao",SCORE_COLS.solidao)}
+      ${demoBlock("Já buscou ajuda","terapia",SCORE_COLS.terapia)}
+      ${demoBlock("Método foi eficaz?","eficaz",SCORE_COLS.eficaz)}
     </div>
     <div class="foot">TDO · Captação · dados locais (CSV embutido)</div>`;
 }
