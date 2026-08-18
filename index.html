@@ -2945,15 +2945,12 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
 // outras etapas), pra poder ir em cada etapa e enviar o resumo separado, na
 // hora que quiser.
 // Painel de pré-visualização: mostra EXATAMENTE o texto que o botão
-// "Copiar resumo" coloca na área de transferência — mesmo padrão já usado
-// no Resumo consolidado da Captação, agora também em Aquecimento, Lembrete
-// e Aulas (antes só existia a visualização em cards).
+// "Copiar resumo" coloca na área de transferência. Mesmo componente do
+// Resumo consolidado da Captação — card com borda, sticky no topo, dentro
+// da coluna da direita do grid "1fr 420px".
 function resumoPreviewBox(text){
-  return `<div style="margin-top:14px">
-    <div class="section-lbl" style="margin-bottom:6px">Prévia do texto que será copiado</div>
-    <div class="cc" style="background:rgba(0,0,0,.25)">
-      <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.8;margin:0;user-select:all">${String(text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
-    </div>
+  return `<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;position:sticky;top:70px">
+    <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.8;margin:0;user-select:all">${String(text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
   </div>`;
 }
 function stageResumoSection(title,subtitle,bodyHtml,scopeKey,previewText){
@@ -2967,8 +2964,10 @@ function stageResumoSection(title,subtitle,bodyHtml,scopeKey,previewText){
         📋 Copiar resumo
       </button>
     </div>
-    ${bodyHtml}
-    ${previewText?resumoPreviewBox(previewText):""}
+    <div style="display:grid;grid-template-columns:1fr 420px;gap:20px;align-items:start">
+      <div>${bodyHtml}</div>
+      ${previewText?resumoPreviewBox(previewText):"<div></div>"}
+    </div>
   </div>`;
 }
 function setManualSpendHoje(v){
