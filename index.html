@@ -261,8 +261,27 @@ const FUNIS = {
     },
     // Sem benchmark definido ainda pra Aquecimento/Lembrete/Aulas/likes neste
     // lançamento — null-safe em todo o código de renderização.
-    aquecimentoMetas:null,
+    // Benchmark do Aquecimento — "Plan consolidado" do oro_jul25.
+    aquecimentoMetas:{
+      cpc:       {val:2.18,  higher:false}, // menor é melhor
+      frequencia:{val:10.98, higher:true},  // meta a ALCANÇAR (repetição planejada)
+      tx75:      {val:9.46,  higher:true},
+      cptx75:    {val:0.54,  higher:false},
+    },
     lembreteMetas:null,
+    // Benchmark do Lembrete por DIAS QUE FALTAM até a Aula 01 (oro_jul25).
+    // A chave é o nº de dias restantes — diasFaltamLembrete() calcula isso a
+    // partir de PLANO_AULAS[0].date (24/08). CPC: menor é melhor;
+    // frequência: é a repetição planejada pra aquele dia (alcançar é bom).
+    lembreteBenchDia:{
+      7:{cpc:0.50, freq:1.74},
+      6:{cpc:0.58, freq:2.69},
+      5:{cpc:0.64, freq:3.43},
+      4:{cpc:0.67, freq:4.43},
+      3:{cpc:0.74, freq:5.62},
+      2:{cpc:0.77, freq:6.86},
+      1:{cpc:0.79, freq:8.17},
+    },
     aula01Metas:null,
     lembreteBenchmark:null,
     cplBenchmark:null,
@@ -390,6 +409,13 @@ let AQUECIMENTO_METAS = FUNIS.tdo.aquecimentoMetas;
 let LEMBRETE_METAS = FUNIS.tdo.lembreteMetas;
 let AULA01_METAS = FUNIS.tdo.aula01Metas;
 let LEMBRETE_BENCHMARK_OUT25 = FUNIS.tdo.lembreteBenchmark;
+// Benchmark do Lembrete por dias-que-faltam (CPC/frequência) — ver FUNIS.
+let LEMBRETE_BENCH_DIA = FUNIS.tdo.lembreteBenchDia;
+// Benchmark do dia de HOJE (ou null fora da janela de 1 a 7 dias).
+function lembreteBenchHoje(){
+  const d=diasFaltamLembrete(todayISO());
+  return (LEMBRETE_BENCH_DIA&&d!=null&&LEMBRETE_BENCH_DIA[d])?{...LEMBRETE_BENCH_DIA[d],diasFaltam:d}:null;
+}
 // CPL_HOURS continua fixo — são os checkpoints de hora em hora (09:30 às
 // 19:30) usados pra registrar likes nos dias de Aula, iguais em qualquer funil.
 const CPL_HOURS = ["09:30","10:30","11:30","12:30","13:30","14:30","15:30","16:30","17:30","18:30","19:30"];
@@ -544,6 +570,7 @@ function switchFunil(key){
   LEMBRETE_METAS=f.lembreteMetas;
   AULA01_METAS=f.aula01Metas;
   LEMBRETE_BENCHMARK_OUT25=f.lembreteBenchmark;
+  LEMBRETE_BENCH_DIA=f.lembreteBenchDia;
   CPL_BENCHMARK_OUT25=f.cplBenchmark;
   META_CARRINHO_CUSTO_FICHA_COM_PRECO=f.metaCarrinhoCustoFichaComPreco;
   PLANO_DIARIO=f.planoDiario;
@@ -2905,9 +2932,9 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
       </div>
     </div>
 
-    ${stageResumoSection("🔥 Resumo Aquecimento",`dados carregados: ${S.aquecimentoRows.length} linha(s)`,aquecimentoResumoHtml(),"aquecimento")}
-    ${stageResumoSection("🔔 Resumo Lembrete",`dados carregados: ${S.lembreteRows.length} linha(s)`,lembreteResumoHtml(),"lembrete")}
-    ${stageResumoSection("🎓 Resumo Aulas","3 aulas · identificadas pelo nome da campanha",aulasResumoHtml(),"aulas")}
+    ${stageResumoSection("🔥 Resumo Aquecimento",`dados carregados: ${S.aquecimentoRows.length} linha(s)`,aquecimentoResumoHtml(),"aquecimento",aquecimentoResumoText())}
+    ${stageResumoSection("🔔 Resumo Lembrete",`dados carregados: ${S.lembreteRows.length} linha(s)`,lembreteResumoHtml(),"lembrete",lembreteResumoText())}
+    ${stageResumoSection("🎓 Resumo Aulas","3 aulas · identificadas pelo nome da campanha",aulasResumoHtml(),"aulas",aulasResumoText())}
 
     <div class="foot">TDO · Captação · dados locais (CSV embutido)</div>`;
   el._resumoText=resumoText;
@@ -2917,7 +2944,19 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
 // seu próprio botão "Copiar resumo" (independente do da Captação e dos das
 // outras etapas), pra poder ir em cada etapa e enviar o resumo separado, na
 // hora que quiser.
-function stageResumoSection(title,subtitle,bodyHtml,scopeKey){
+// Painel de pré-visualização: mostra EXATAMENTE o texto que o botão
+// "Copiar resumo" coloca na área de transferência — mesmo padrão já usado
+// no Resumo consolidado da Captação, agora também em Aquecimento, Lembrete
+// e Aulas (antes só existia a visualização em cards).
+function resumoPreviewBox(text){
+  return `<div style="margin-top:14px">
+    <div class="section-lbl" style="margin-bottom:6px">Prévia do texto que será copiado</div>
+    <div class="cc" style="background:rgba(0,0,0,.25)">
+      <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);white-space:pre-wrap;line-height:1.8;margin:0;user-select:all">${String(text||"").replace(/&/g,"&amp;").replace(/</g,"&lt;")}</pre>
+    </div>
+  </div>`;
+}
+function stageResumoSection(title,subtitle,bodyHtml,scopeKey,previewText){
   return `<div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--border)">
     <div class="hdr" style="margin-bottom:14px">
       <div>
@@ -2929,6 +2968,7 @@ function stageResumoSection(title,subtitle,bodyHtml,scopeKey){
       </button>
     </div>
     ${bodyHtml}
+    ${previewText?resumoPreviewBox(previewText):""}
   </div>`;
 }
 function setManualSpendHoje(v){
@@ -4017,6 +4057,13 @@ function aquecimentoResumoHtml(){
     )}
     <div style="font-size:10px;color:var(--hint);max-width:640px">Total e Facebook mostram os mesmos números — esta base só tem uma fonte de tráfego (Meta Ads), sem quebra por plataforma. Tx75%/Custo por Tx75% usam Impressões como base (não há "Video Plays" nesta base).</div>`;
 }
+// Soma do planejamento de uma etapa até hoje (inclusive) — usado nos
+// resumos pra mostrar "(planej até hoje: R$ x)" ao lado do realizado.
+function planoAcumAteHoje(plano){
+  if(!plano||!plano.length)return null;
+  const hoje=todayISO();
+  return plano.filter(x=>x.date<=hoje).reduce((a,x)=>a+x.investimento,0);
+}
 function aquecimentoResumoText(){
   const metas=AQUECIMENTO_METAS;
   const rows=S.aquecimentoRows;
@@ -4025,22 +4072,30 @@ function aquecimentoResumoText(){
   const freq=alcance>0?m.impressions/alcance:null;
   const dates=rows.map(r=>r.date).sort();
   const first=dates[0]||null;
-  return `*TDO ago/26 - Resumo Aquecimento*
-${metas?"Benchmark definido":"sem meta definida ainda"} · ${first?fDateBR(first):"—"} → ${fDateBR(todayISO())}
+  const plan=planoAcumAteHoje(PLANO_AQUECIMENTO);
+  // Cliques planejados = investimento planejado ÷ CPC de benchmark (a
+  // planilha de planejamento só traz investimento por dia).
+  const planClicks=(plan!=null&&metas)?Math.round(plan/metas.cpc.val):null;
+  const bm=(v,meta,higher,fmt)=>metas?`${metaEmojiGlobal(v,meta,higher)} Plan consolidado: ${fmt(meta)}`:"sem meta ainda";
+  const planTxt=plan!=null?`(planej até hoje: ${fBRL(plan)})`:"(sem plano p/ este período)";
+  return `*tdo_ago26 - Resumo Aquecimento* - benchmark oro_jul25
 
-*Total*
-Investimento total:\t${fBRL(m.spend)}
-Cliques:\t${m.clicks.toLocaleString("pt-BR")}
-CPC:\t${m.cpc!=null?fBRL(m.cpc):"—"}\t${metas?metaEmojiGlobal(m.cpc,metas.cpc.val,metas.cpc.higher):""}${metas?` (🎯: ${fBRL(metas.cpc.val)})`:" (sem meta ainda)"}
+${first?fDateBR(first):"—"}\t${fDateBR(todayISO())}
 
-*Facebook*
-Investimento:\t${fBRL(m.spend)}
-Cliques:\t${m.clicks.toLocaleString("pt-BR")}
-CPC:\t${m.cpc!=null?fBRL(m.cpc):"—"}\t${metas?metaEmojiGlobal(m.cpc,metas.cpc.val,metas.cpc.higher):""}${metas?` (🎯: ${fBRL(metas.cpc.val)})`:" (sem meta ainda)"}
-Alcance:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}\t(manual — API não fornece)
-Frequência:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}\t${metas?(freq!=null?metaEmojiGlobal(freq,metas.frequencia.val,metas.frequencia.higher):"⚪"):""}${metas?` (🎯: ${metas.frequencia.val})`:" (sem meta ainda)"}
-Tx 75%:\t${m.tx75!=null?fPct(m.tx75):"—"}\t${metas?metaEmojiGlobal(m.tx75,metas.tx75.val,metas.tx75.higher):""}${metas?` (🎯: ${metas.tx75.val}%)`:" (sem meta ainda)"}
-Custo por Tx 75%:\t${m.cptx75!=null?fBRL(m.cptx75):"—"}\t${metas?metaEmojiGlobal(m.cptx75,metas.cptx75.val,metas.cptx75.higher):""}${metas?` (🎯: ${fBRL(metas.cptx75.val)})`:" (sem meta ainda)"}`;
+-> Total
+Investido total: ${fBRL(m.spend)}\t${planTxt}
+Cliques\t${m.clicks.toLocaleString("pt-BR")}\t${planClicks!=null?`(planej até hoje: ${planClicks.toLocaleString("pt-BR")})`:"(sem plano p/ este período)"}
+CPC:\t${m.cpc!=null?fBRL(m.cpc):"—"}\t${bm(m.cpc,metas&&metas.cpc.val,metas&&metas.cpc.higher,fBRL)}
+
+*Investimento Facebook:*\t${fBRL(m.spend)}\t${planTxt}
+Link clicks:\t${m.clicks.toLocaleString("pt-BR")}
+
+Meta CPC:\t${m.cpc!=null?fBRL(m.cpc):"—"}\t${bm(m.cpc,metas&&metas.cpc.val,metas&&metas.cpc.higher,fBRL)}
+Alcance:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}
+Facebook Frequência:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}\t${bm(freq,metas&&metas.frequencia.val,metas&&metas.frequencia.higher,v=>String(v).replace(".",","))}
+
+Facebook Tx 75%: ${m.tx75!=null?fPct(m.tx75):"—"}\t${bm(m.tx75,metas&&metas.tx75.val,metas&&metas.tx75.higher,v=>String(v).replace(".",",")+"%")}
+Facebook Cptx75%:\t${m.cptx75!=null?fBRL(m.cptx75):"—"}\t${bm(m.cptx75,metas&&metas.cptx75.val,metas&&metas.cptx75.higher,fBRL)}`;
 }
 function lembreteResumoHtml(){
   const metas=LEMBRETE_METAS;
@@ -4072,32 +4127,42 @@ function lembreteResumoHtml(){
     <div style="font-size:10px;color:var(--hint);max-width:640px">Total e Facebook mostram os mesmos números — esta base só tem uma fonte de tráfego (Meta Ads). ${metas?"Metas fixas de benchmark (não é uma curva dia-a-dia).":"Sem meta definida ainda pra esta etapa."}</div>`;
 }
 function lembreteResumoText(){
-  const metas=LEMBRETE_METAS;
   const rows=S.lembreteRows;
   const m=stageMetrics(rows);
   const alcance=S.manualAlcance.lembrete;
   const freq=alcance>0?m.impressions/alcance:null;
-  const dates=rows.map(r=>r.date).sort();
-  const first=dates[0]||null;
   const leadsAoVivo=S.leadsRows.length;
   const likesRows=lembreteLikesRows(leadsAoVivo).map(r=>({label:`${fDateBR(r.date)}${r.diasFaltam!=null?` (faltam ${r.diasFaltam}d)`:""}`,likes:r.likes,fatorX:r.fatorX,meta:r.meta}));
-  return `*TDO ago/26 - Resumo Lembrete*
-${metas?"Benchmark definido":"sem meta definida ainda"} · ${first?fDateBR(first):"—"} → ${fDateBR(todayISO())}
+  // Benchmark do Lembrete varia por DIA (dias que faltam pra Aula 01).
+  const b=lembreteBenchHoje();
+  const plan=planoAcumAteHoje(PLANO_LEMBRETE);
+  const planTxt=plan!=null?`(planej até hoje: ${fBRL(plan)})`:"(sem plano p/ este período)";
+  const planClicks=(plan!=null&&b)?Math.round(plan/b.cpc):null;
+  const cpcTxt=b?`${metaEmojiGlobal(m.cpc,b.cpc,false)} Plan consolidado: ${fBRL(b.cpc)}`:"sem benchmark p/ hoje";
+  const clicksTxt=planClicks!=null?`${metaEmojiGlobal(m.clicks,planClicks,true)} Plan até hoje: ${planClicks.toLocaleString("pt-BR")}`:"sem plano p/ este período";
+  const freqTxt=b?`(${freq!=null?metaEmojiGlobal(freq,b.freq,true):"⚪"} Meta hj: ${String(b.freq).replace(".",",")})`:"(sem benchmark p/ hoje)";
+  return `*tdo_ago26 - Resumo Lembrete - Bench oro_jul25*
 
-*Likes na aula01 (checkpoint 12:00, vs. fator X × leads ao vivo)*
+Date\t${fDateBR(todayISO())}${b?`\t(faltam ${b.diasFaltam} dia${b.diasFaltam>1?"s":""} p/ a Aula 01)`:""}
+
+👍 Likes na aula01 Bench jul25->
 ${likesBenchmarkTableText(likesRows,"Dia")}
 
-*Total*
-Investido total:\t${fBRL(m.spend)}
-Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}
-CPC total:\t${m.cpc!=null?fBRL(m.cpc):"—"}\t${metas?metaEmojiGlobal(m.cpc,metas.cpc.val,metas.cpc.higher):""}${metas?` (🎯: ${fBRL(metas.cpc.val)})`:" (sem meta ainda)"}
+-> Total
+Investido total: ${fBRL(m.spend)}\t${planTxt}
 
-*Facebook*
-Investimento:\t${fBRL(m.spend)}
-Link clicks:\t${m.clicks.toLocaleString("pt-BR")}
-CPC no link:\t${m.cpc!=null?fBRL(m.cpc):"—"}\t${metas?metaEmojiGlobal(m.cpc,metas.cpc.val,metas.cpc.higher):""}${metas?` (🎯: ${fBRL(metas.cpc.val)})`:" (sem meta ainda)"}
-Alcance:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}\t(manual — API não fornece)
-Frequência:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}\t${metas?(freq!=null?metaEmojiGlobal(freq,metas.frequencia.val,metas.frequencia.higher):"⚪"):""}${metas?` (🎯: ${metas.frequencia.val})`:" (sem meta ainda)"}`;
+Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}\t${clicksTxt}
+CPC:\t${m.cpc!=null?fBRL(m.cpc):"—"}\t${cpcTxt}
+
+---------------------
+
+-> Facebook
+Investido total: ${fBRL(m.spend)}\t${planTxt}
+Cliques totais:\t${m.clicks.toLocaleString("pt-BR")}\t${clicksTxt}
+
+CPC:\t${m.cpc!=null?fBRL(m.cpc):"—"}\t${cpcTxt}
+Alcance:\t${alcance?alcance.toLocaleString("pt-BR"):"—"}
+Frequencia:\t${freq!=null?freq.toFixed(2).replace(".",","):"—"}\t${freqTxt}`;
 }
 // Cada aula é identificada pelo NOME DA CAMPANHA (via aulaNumberFromCampaign)
 // — não por uma coluna própria, já que a Base Meta - Aulas mistura as 3
