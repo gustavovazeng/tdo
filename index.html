@@ -289,9 +289,10 @@ const FUNIS = {
     metaCarrinhoCustoFichaComPreco:40,
     // Planejamento diário — Captação de 13/08 a 24/08. "leads" recalculado a
     // partir do investimento diário ÷ meta de CPL (leads = round(inv/6.50)).
-    // Replanejamento de 18/08: teto da captação passou para R$ 150.000.
-    // Dias 13→18 CONGELADOS como já estavam (R$ 67.503,88). Os R$ 82.496,12
-    // restantes: valor LINEAR de 19 a 23/08 e o dia 24 em 60% do dia 23.
+    // Replanejamento de 19/08: teto da captação passou para R$ 105.000.
+    // Dias 13→19 CONGELADOS (R$ 82.242,00 no total, incluindo os
+    // R$ 14.738,12 já fixados no dia 19). Os R$ 22.758,00 restantes: valor
+    // LINEAR de 20 a 23/08 e o dia 24 em 60% do dia 23.
     // "leads" = investimento ÷ meta de CPL (R$ 6,50).
     planoDiario:[
       {date:"2026-08-13", investimento:0, leads:0},
@@ -301,11 +302,11 @@ const FUNIS = {
       {date:"2026-08-17", investimento:15000, leads:2308},
       {date:"2026-08-18", investimento:21308.05, leads:3278},
       {date:"2026-08-19", investimento:14738.12, leads:2267},
-      {date:"2026-08-20", investimento:14730, leads:2266},
-      {date:"2026-08-21", investimento:14730, leads:2266},
-      {date:"2026-08-22", investimento:14730, leads:2266},
-      {date:"2026-08-23", investimento:14730, leads:2266},
-      {date:"2026-08-24", investimento:8838, leads:1360},
+      {date:"2026-08-20", investimento:4938, leads:760},
+      {date:"2026-08-21", investimento:4950, leads:762},
+      {date:"2026-08-22", investimento:4950, leads:762},
+      {date:"2026-08-23", investimento:4950, leads:762},
+      {date:"2026-08-24", investimento:2970, leads:457},
     ],
     // Aquecimento e Lembrete rodam na mesma semana (17/08→23/08), Aulas
     // gratuitas em 24-26/08, Carrinho de 27/08 a 03/09.
