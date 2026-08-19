@@ -289,13 +289,9 @@ const FUNIS = {
     metaCarrinhoCustoFichaComPreco:40,
     // Planejamento diário — Captação de 13/08 a 24/08. "leads" recalculado a
     // partir do investimento diário ÷ meta de CPL (leads = round(inv/6.50)).
-    // Planejamento refeito em 17/08: R$ 450.000 no total da captação.
-    // Curva de crescimento CONSTANTE (~43%/dia) de hoje até o pico, que
-    // vira um platô de 2 dias (22 e 23/08 iguais), e 24/08 a 70% do platô.
-    // A taxa é alta porque restam R$ 403.804 para 7 dias partindo de uma
-    // base de R$ 15.000 — crescimento constante dilui isso sem nenhum
-    // degrau isolado maior que os demais.
-    // Os dias 13→16 são o REALIZADO e 17/08 são os R$ 15.000 definidos.
+    // Replanejamento de 18/08: teto da captação passou para R$ 150.000.
+    // Dias 13→18 CONGELADOS como já estavam (R$ 67.503,88). Os R$ 82.496,12
+    // restantes: valor LINEAR de 19 a 23/08 e o dia 24 em 60% do dia 23.
     // "leads" = investimento ÷ meta de CPL (R$ 6,50).
     planoDiario:[
       {date:"2026-08-13", investimento:0, leads:0},
@@ -304,53 +300,53 @@ const FUNIS = {
       {date:"2026-08-16", investimento:4989.99, leads:768},
       {date:"2026-08-17", investimento:15000, leads:2308},
       {date:"2026-08-18", investimento:21308.05, leads:3278},
-      {date:"2026-08-19", investimento:30800, leads:4738},
-      {date:"2026-08-20", investimento:44100, leads:6785},
-      {date:"2026-08-21", investimento:63200, leads:9723},
-      {date:"2026-08-22", investimento:90517.08, leads:13926},
-      {date:"2026-08-23", investimento:90517.08, leads:13926},
-      {date:"2026-08-24", investimento:63361.96, leads:9748},
+      {date:"2026-08-19", investimento:14738.12, leads:2267},
+      {date:"2026-08-20", investimento:14730, leads:2266},
+      {date:"2026-08-21", investimento:14730, leads:2266},
+      {date:"2026-08-22", investimento:14730, leads:2266},
+      {date:"2026-08-23", investimento:14730, leads:2266},
+      {date:"2026-08-24", investimento:8838, leads:1360},
     ],
     // Aquecimento e Lembrete rodam na mesma semana (17/08→23/08), Aulas
     // gratuitas em 24-26/08, Carrinho de 27/08 a 03/09.
     planoAquecimento:[
       {date:"2026-08-18", investimento:968.89},
-      {date:"2026-08-19", investimento:1280},
-      {date:"2026-08-20", investimento:1280},
-      {date:"2026-08-21", investimento:1600},
-      {date:"2026-08-22", investimento:2560},
-      {date:"2026-08-23", investimento:3200},
+      {date:"2026-08-19", investimento:349.65},
+      {date:"2026-08-20", investimento:350},
+      {date:"2026-08-21", investimento:430},
+      {date:"2026-08-22", investimento:690},
+      {date:"2026-08-23", investimento:870},
     ],
-    planoAquecimentoTotal:10888.89,
+    planoAquecimentoTotal:3658.54,
     planoLembrete:[
       {date:"2026-08-18", investimento:568.89},
-      {date:"2026-08-19", investimento:1150},
-      {date:"2026-08-20", investimento:1150},
-      {date:"2026-08-21", investimento:2290},
-      {date:"2026-08-22", investimento:2290},
-      {date:"2026-08-23", investimento:3440},
+      {date:"2026-08-19", investimento:339.65},
+      {date:"2026-08-20", investimento:340},
+      {date:"2026-08-21", investimento:690},
+      {date:"2026-08-22", investimento:690},
+      {date:"2026-08-23", investimento:1030},
     ],
     planoAulas:[
-      {date:"2026-08-24", investimento:9252.22},
-      {date:"2026-08-25", investimento:8710},
-      {date:"2026-08-26", investimento:9260},
+      {date:"2026-08-24", investimento:3106.34},
+      {date:"2026-08-25", investimento:2930},
+      {date:"2026-08-26", investimento:3110},
     ],
     planoCarrinho:[
-      {date:"2026-08-27", investimento:12980},
-      {date:"2026-08-28", investimento:9360},
-      {date:"2026-08-29", investimento:6270},
-      {date:"2026-08-30", investimento:7250},
-      {date:"2026-08-31", investimento:2940},
-      {date:"2026-09-01", investimento:1960},
-      {date:"2026-09-02", investimento:1470},
-      {date:"2026-09-03", investimento:1470},
-      {date:"2026-09-04", investimento:980},
-      {date:"2026-09-05", investimento:980},
-      {date:"2026-09-06", investimento:740},
-      {date:"2026-09-07", investimento:740},
-      {date:"2026-09-08", investimento:490},
-      {date:"2026-09-09", investimento:490},
-      {date:"2026-09-10", investimento:880},
+      {date:"2026-08-27", investimento:4363.41},
+      {date:"2026-08-28", investimento:3140},
+      {date:"2026-08-29", investimento:2110},
+      {date:"2026-08-30", investimento:2440},
+      {date:"2026-08-31", investimento:990},
+      {date:"2026-09-01", investimento:660},
+      {date:"2026-09-02", investimento:490},
+      {date:"2026-09-03", investimento:490},
+      {date:"2026-09-04", investimento:330},
+      {date:"2026-09-05", investimento:330},
+      {date:"2026-09-06", investimento:250},
+      {date:"2026-09-07", investimento:250},
+      {date:"2026-09-08", investimento:160},
+      {date:"2026-09-09", investimento:160},
+      {date:"2026-09-10", investimento:300},
     ],
   },
 };
