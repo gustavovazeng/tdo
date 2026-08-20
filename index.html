@@ -1571,10 +1571,17 @@ function fPctOrDash(v){ return v==null?"—":fPct(v); }
 // pois o resumo consolidado do lançamento não segmenta por canal.
 function resumoMetrics(s,e){
   const per=periodTotals(s,e);
-  const qm=qualityMetrics(s,e,"total");
-  const rows=leadsInRange(s,e);
-  const leadsTrafego=leadsForChannel(rows,"trafego").length;
-  const leadsOrganico=leadsForChannel(rows,"organico").length;
+  // TODAS as métricas de qualidade do Resumo diário são calculadas SÓ sobre
+  // leads de TRÁFEGO (faixas, % quente+morno, tx de resposta da pesquisa,
+  // conhece Ramon/AD). Orgânico fica de fora do numerador e do denominador —
+  // antes o canal era "total" e as faixas não batiam com a aba de Captação
+  // filtrada por tráfego. As linhas "Cadastros no AC Orgânico/Total"
+  // continuam existindo, mas são só contagem informativa.
+  const qm=qualityMetrics(s,e,"trafego");
+  const rowsAll=leadsInRange(s,e);
+  const rows=leadsForChannel(rowsAll,"trafego");
+  const leadsTrafego=rows.length;
+  const leadsOrganico=leadsForChannel(rowsAll,"organico").length;
   const quenteMornoRows=rows.filter(l=>l.temperatureName==="Quente"||l.temperatureName==="Morno");
   const quenteMornoPct=rows.length>0?(quenteMornoRows.length/rows.length)*100:null;
   // Tx conv Pg cadastro: leads de tráfego ÷ sessões da página de captura
