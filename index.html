@@ -465,7 +465,7 @@ const S = {
   leadsRows:[],          // leads reais, JÁ DEDUPLICADAS por telefone/e-mail (1ª inscrição de cada pessoa): {date,ms,quizOk,faixa,name,email,phone,utmSource,adName,campName,...demografia}
   leadsRowsRaw:[],       // mesma coisa, SEM dedup — toda submissão do formulário conta, mesmo repetida. Só usado pra mostrar "leads totais" ao lado do número deduplicado (ver kpiCard "Leads captados").
   leadsByDate:{},        // date → count (leads reais/dia, já deduplicado)
-  ga4Rows:[],            // linhas da Base GA4 (só tráfego FBAds — exclusão da página de pesquisa/quiz pendente, ver processGA4): {date,sessions,pageViews,temperatureName}
+  ga4Rows:[],            // linhas da Base GA4 (só tráfego FBAds, já SEM as páginas de GA4_PATHS_EXCLUIDOS — ver processGA4): {date,sessions,pageViews,temperatureName}
   likesRows:[],          // linhas da Contagem likes: {date,time,likes}
   aquecimentoRows:[],    // linhas da Base Meta - aquecimento: {date,campName,adName,igUrl,spend,clicks,impressions,video75}
   lembreteRows:[],       // idem, Base Meta - lembrete
@@ -1096,13 +1096,26 @@ function processCarrinhoVendas(vendasRowsRaw){
 //    "FBAds") — exclui orgânico (ActiveCampaign, whatsapp, ytb-ramon etc.).
 //  • Exclusão da página de PESQUISA (quiz, acessada só DEPOIS do cadastro —
 //    não deve entrar no Connect Rate nem na conversão de página, que medem o
-//    funil até o cadastro): retirada por enquanto — precisa do path real
-//    dessa página nesta planilha pra recriar o filtro. Enquanto não
-//    tiver, a página de pesquisa entra junto nos cálculos de sessão.
+//    funil até o cadastro): FEITA — ver GA4_PATHS_EXCLUIDOS abaixo.
 //  • "Sessions" = visitas únicas (métrica usada pra Connect Rate/conversão);
 //    "Page Views" fica disponível mas não usado nesses dois cálculos.
 // Temperatura extraída do "Session Medium" (= utm_medium = nome da campanha),
 // mesmo critério já usado pra Base Meta/Base leads (campaignTemperature).
+// Páginas que NÃO fazem parte do funil até o cadastro e por isso ficam fora
+// de toda a análise de páginas (Connect Rate, Tx conv Pg cadastro e a tabela
+// "Página (GA4)" da aba Principal):
+//  • /quiz-tdo         → pesquisa, acessada só DEPOIS do cadastro
+//  • /tdo/v1/h1/1/org  → tráfego orgânico, não entra na conta do pago
+// Comparação normalizada (sem barra final e sem querystring) pra não
+// escapar por causa de "/quiz-tdo/" ou "/quiz-tdo?utm=...".
+const GA4_PATHS_EXCLUIDOS = ["/quiz-tdo","/tdo/v1/h1/1/org"];
+function normPath(p){
+  return String(p||"").trim().split("?")[0].split("#")[0].replace(/\/+$/,"").toLowerCase();
+}
+function ga4PathExcluido(p){
+  const v=normPath(p);
+  return GA4_PATHS_EXCLUIDOS.some(x=>normPath(x)===v);
+}
 function processGA4(rowsRaw){
   const rows=[];
   for(const r of rowsRaw){
@@ -1110,6 +1123,7 @@ function processGA4(rowsRaw){
     const source=(r["Session Source"]||"").trim();
     if(!source.startsWith("FBAds"))continue;
     const pagePath=(r["Page Path"]||"").trim();
+    if(ga4PathExcluido(pagePath))continue;
     const sessionMedium=(r["Session Medium"]||"").trim();
     const sessions=parseInt(r["Sessions"],10)||0;
     const pageViews=parseInt(r["Page Views"],10)||0;
