@@ -1076,7 +1076,10 @@ function processCarrinhoVendas(vendasRowsRaw){
     const valor=parseBRL(getCol(r,"valor","Valor","Preço","Price"));
     const ms=parseFichaDateTimeMs(getCol(r,"Data Correta","Data","Data da venda","created_at"));
     const d=ms!=null?msToISO(ms):null;
-    if(d)porDia[d]=(porDia[d]||0)+1;
+    // NÃO conta aqui: se a Base vendas não tiver coluna de data (é o caso
+    // hoje), "d" fica null e o gráfico de vendas por dia ficava ZERADO. A
+    // contagem por dia passou pra depois do casamento, usando "vd" — que cai
+    // na data da ficha quando a venda não traz data própria.
     const candidates=[];
     if(ph&&earliestByPhone[ph])candidates.push(earliestByPhone[ph]);
     if(em&&earliestByEmail[em])candidates.push(earliestByEmail[em]);
@@ -1084,13 +1087,15 @@ function processCarrinhoVendas(vendasRowsRaw){
       candidates.sort((a,b)=>a.ms-b.ms);
       const best=candidates[0];
       matched++;
-      const vd=d||best.date; // fallback pra data da ficha se "Data Correta" vier vazia/quebrada
+      const vd=d||best.date; // fallback pra data da ficha se a venda não trouxer data
+      porDia[vd]=(porDia[vd]||0)+1;
       if(best.tipo==="traf"){
         vendaAttrib.push({date:vd,valor,adName:best.adName||"(sem atribuição)",campName:best.campName||"(sem atribuição)"});
       }
       vendaOrigem.push({date:vd,valor,tipo:best.tipo,origem:best.origem,canal:best.canal,comPreco:best.comPreco});
     }else{
       unmatched++;
+      if(d)porDia[d]=(porDia[d]||0)+1; // sem ficha casada, só entra se a venda tiver data própria
     }
   }
   S.carrinhoVendaAttrib=vendaAttrib;
@@ -3289,17 +3294,22 @@ function getCarrinhoDaily(start,end){
     if(!metaByDate[r.date])metaByDate[r.date]={spend:0,clicks:0};
     metaByDate[r.date].spend+=r.spend;metaByDate[r.date].clicks+=r.clicks;
   }
-  const fichasByDate={},fichasComPrecoByDate={};
+  // tipo "traf" = ficha com UTM de anúncio; qualquer outro (org/disparo)
+  // entra em orgânico, mesmo critério das tabelas de origem/canal.
+  const fichasByDate={},fichasComPrecoByDate={},fichasTrafByDate={},fichasOrgByDate={};
   for(const f of S.carrinhoFichaOrigem){
     if(f.date<start||f.date>end)continue;
     fichasByDate[f.date]=(fichasByDate[f.date]||0)+1;
     if(f.comPreco)fichasComPrecoByDate[f.date]=(fichasComPrecoByDate[f.date]||0)+1;
+    if(f.tipo==="traf")fichasTrafByDate[f.date]=(fichasTrafByDate[f.date]||0)+1;
+    else fichasOrgByDate[f.date]=(fichasOrgByDate[f.date]||0)+1;
   }
   const dates=new Set([...Object.keys(metaByDate),...Object.keys(fichasByDate)]);
   return[...dates].sort().map(d=>{
     const m=metaByDate[d]||{spend:0,clicks:0};
     const fichas=fichasByDate[d]||0, fichasComPreco=fichasComPrecoByDate[d]||0;
     return{date:d,label:fDate(d),spend:m.spend,clicks:m.clicks,fichas,fichasComPreco,
+      fichasTraf:fichasTrafByDate[d]||0, fichasOrg:fichasOrgByDate[d]||0,
       custoFichaComPreco:fichasComPreco>0?m.spend/fichasComPreco:null};
   });
 }
@@ -3346,8 +3356,22 @@ function renderCarrinhoPrincipal(){
     </div>
 
     <div class="cc" style="position:relative;margin-bottom:20px">
-      <div class="ch"><span class="ct">Fichas por dia</span></div>
+      <div class="ch"><span class="ct">Fichas por dia — Total</span></div>
       <div style="position:relative"><canvas id="c-carrinho-fichas"></canvas><div class="tip" id="t-carrinho-fichas"></div></div>
+    </div>
+
+    <div class="cc" style="position:relative;margin-bottom:14px">
+      <div class="ch"><span class="ct">Fichas por dia — Tráfego</span>
+        <div class="lg"><span class="li"><span class="ll" style="background:${CHART_INV}"></span>Fichas de tráfego</span></div>
+      </div>
+      <div style="position:relative"><canvas id="c-carrinho-fichas-traf"></canvas><div class="tip" id="t-carrinho-fichas-traf"></div></div>
+    </div>
+
+    <div class="cc" style="position:relative;margin-bottom:20px">
+      <div class="ch"><span class="ct">Fichas por dia — Orgânico</span>
+        <div class="lg"><span class="li"><span class="ll" style="background:${CHART_QUIZ}"></span>Fichas orgânicas (inclui disparo)</span></div>
+      </div>
+      <div style="position:relative"><canvas id="c-carrinho-fichas-org"></canvas><div class="tip" id="t-carrinho-fichas-org"></div></div>
     </div>
 
     ${daily.length===0?`<div class="err">Nenhum dado no período selecionado — o Carrinho ainda não começou ou os dados ainda não chegaram na planilha.</div>`:""}
@@ -3365,6 +3389,16 @@ function renderCarrinhoPrincipal(){
     setupTip("c-carrinho-fichas","t-carrinho-fichas",daily,[
       {name:"Fichas totais",color:CHART_LEAD,key:"fichas",fmt:v=>String(v)},
       {name:"Fichas com preço",color:CHART_CPL,key:"fichasComPreco",fmt:v=>String(v)}],40,12);
+
+    const box3=document.getElementById("c-carrinho-fichas-traf")?.parentElement;
+    if(box3)drawBarSingle("c-carrinho-fichas-traf",daily,"fichasTraf",CHART_INV,box3.clientWidth,200);
+    setupTip("c-carrinho-fichas-traf","t-carrinho-fichas-traf",daily,[
+      {name:"Fichas tráfego",color:CHART_INV,key:"fichasTraf",fmt:v=>String(v)}],40,12);
+
+    const box4=document.getElementById("c-carrinho-fichas-org")?.parentElement;
+    if(box4)drawBarSingle("c-carrinho-fichas-org",daily,"fichasOrg",CHART_QUIZ,box4.clientWidth,200);
+    setupTip("c-carrinho-fichas-org","t-carrinho-fichas-org",daily,[
+      {name:"Fichas orgânicas",color:CHART_QUIZ,key:"fichasOrg",fmt:v=>String(v)}],40,12);
   });
 }
 
@@ -3630,6 +3664,17 @@ function getCarrinhoVendasDaily(start,end){
   return Object.keys(S.carrinhoVendasPorDia).filter(d=>d>=start&&d<=end).sort()
     .map(d=>({date:d,label:fDate(d),vendas:S.carrinhoVendasPorDia[d]}));
 }
+// Investimento TOTAL de tráfego do lançamento inteiro, somando TODAS as
+// etapas: captação, aquecimento, lembrete, aulas e carrinho. É a base do
+// ROAS do carrinho — a venda no fim do funil é fruto de tudo que foi gasto
+// antes, não só da verba do próprio carrinho.
+function investimentoTotalLancamento(){
+  const soma=arr=>(arr||[]).reduce((a,r)=>a+(r.spend||0),0);
+  return soma(S.metaRows)          // Base Meta - captação (inclui campanhas de Carrinho)
+        +soma(S.aquecimentoRows)
+        +soma(S.lembreteRows)
+        +soma(S.aulasRows);
+}
 function renderCarrinhoVendas(){
   const el=document.getElementById("page-carrinho-vendas");if(!el)return;
   const per=getCurrentPeriod();
@@ -3638,6 +3683,15 @@ function renderCarrinhoVendas(){
   const vendasNoPeriodo=Object.entries(S.carrinhoVendasPorDia).filter(([d])=>d>=start&&d<=end).reduce((a,[,n])=>a+n,0);
   const vendasCasadas=S.carrinhoVendaOrigem.filter(v=>v.date>=start&&v.date<=end).length;
   const conv=fichasNoPeriodo>0?(vendasNoPeriodo/fichasNoPeriodo)*100:0;
+  // Faturamento e ROAS são SEMPRE do lançamento inteiro — ignoram o filtro
+  // de datas do cabeçalho, igual ao investimento total que vai no
+  // denominador. Assim os dois lados da conta falam do mesmo período e o
+  // ROAS não fica subestimado por um filtro curto.
+  const vendasPer=S.carrinhoVendaOrigem;
+  const faturamento=vendasPer.reduce((a,v)=>a+(v.valor||0),0);
+  const ticket=vendasPer.length>0?faturamento/vendasPer.length:null;
+  const invTotal=investimentoTotalLancamento();
+  const roas=invTotal>0?faturamento/invTotal:null;
   const daily=getCarrinhoVendasDaily(start,end);
   const origemRows=getCarrinhoVendaOrigemRows(start,end);
 
@@ -3650,7 +3704,14 @@ function renderCarrinhoVendas(){
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${S.carrinhoVendasTotal===0?`<div class="err" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06);color:#fbbf24">⚠️ Nenhuma venda encontrada na aba "Base vendas" ainda.</div>`:""}
-    <div style="font-size:10px;color:var(--hint);margin-bottom:14px">"Base vendas" não tem o valor de cada venda — por isso não há faturamento/ROAS aqui, só volume e conversão de ficha em venda.</div>
+    <div style="font-size:10px;color:var(--hint);margin-bottom:14px">Faturamento e ROAS consideram o LANÇAMENTO INTEIRO, sem o filtro de datas do cabeçalho (os demais cartões respeitam o período). ROAS = faturamento ÷ investimento de tráfego do lançamento INTEIRO (captação + aquecimento + lembrete + aulas + carrinho), não só a verba do carrinho.</div>
+
+    <div class="g4" style="margin-bottom:13px">
+      ${kpiCard("Faturamento total",fBRL(faturamento),`${vendasPer.length.toLocaleString("pt-BR")} venda(s) · lançamento inteiro`,"#34d399")}
+      ${kpiCard("Ticket médio",ticket!=null?fBRL(ticket):"—","lançamento inteiro","var(--text-strong)")}
+      ${kpiCard("Investimento total",fBRL(invTotal),"todas as etapas do lançamento","var(--text-strong)")}
+      ${kpiCard("ROAS",roas!=null?roas.toFixed(2).replace(".",","):"—",roas!=null?`${fBRL(faturamento)} ÷ ${fBRL(invTotal)}`:"sem investimento no período",roas!=null?(roas>=1?"#34d399":"#f87171"):"var(--text-strong)")}
+    </div>
 
     <div class="g4" style="margin-bottom:20px">
       ${kpiCard("Vendas no período",vendasNoPeriodo.toLocaleString("pt-BR"),"","var(--text-strong)")}
