@@ -3300,16 +3300,26 @@ function carrinhoMetaRowsInRange(start,end){
 function carrinhoFichasInRange(fichas,start,end){
   return fichas.filter(f=>f.date>=start&&f.date<=end);
 }
+// Só fichas de TRÁFEGO entram aqui (com e sem preço). As orgânicas/disparo
+// ficam restritas à sub-aba "Fichas" — não entram em custo por ficha, nem no
+// Principal, nem no Resumo, porque não há investimento associado a elas e
+// isso distorceria o custo pra baixo.
 function carrinhoMetrics(start,end){
   const metaRows=carrinhoMetaRowsInRange(start,end);
   const spend=metaRows.reduce((a,r)=>a+r.spend,0);
   const clicks=metaRows.reduce((a,r)=>a+r.clicks,0);
-  const fichas=carrinhoFichasInRange(S.carrinhoFichaOrigem,start,end);
+  const impressions=metaRows.reduce((a,r)=>a+(r.impressions||0),0);
+  const fichas=carrinhoFichasInRange(S.carrinhoFichaOrigem,start,end).filter(f=>f.tipo==="traf");
   const fichasTotal=fichas.length;
   const fichasComPreco=fichas.filter(f=>f.comPreco).length;
-  return{spend,clicks,fichasTotal,fichasComPreco,
+  return{spend,clicks,impressions,fichasTotal,fichasComPreco,
     custoFicha:fichasTotal>0?spend/fichasTotal:null,
-    custoFichaComPreco:fichasComPreco>0?spend/fichasComPreco:null};
+    custoFichaComPreco:fichasComPreco>0?spend/fichasComPreco:null,
+    cpc:clicks>0?spend/clicks:null,
+    ctr:impressions>0?(clicks/impressions)*100:null,
+    cpm:impressions>0?(spend/impressions)*1000:null,
+    // Tx conversão formulário = fichas de tráfego ÷ cliques no link.
+    txConvForm:clicks>0?(fichasTotal/clicks)*100:null};
 }
 function getCarrinhoDaily(start,end){
   const metaByDate={};
@@ -3320,20 +3330,22 @@ function getCarrinhoDaily(start,end){
   }
   // tipo "traf" = ficha com UTM de anúncio; qualquer outro (org/disparo)
   // entra em orgânico, mesmo critério das tabelas de origem/canal.
-  const fichasByDate={},fichasComPrecoByDate={},fichasTrafByDate={},fichasOrgByDate={};
+  // fichas/fichasComPreco = só TRÁFEGO (as que entram em custo por ficha).
+  // fichasOrg existe só pro gráfico "Fichas por dia (orgânico)" do Principal:
+  // volume informativo, fora de qualquer custo e fora do Resumo.
+  const fichasByDate={},fichasComPrecoByDate={},fichasOrgByDate={};
   for(const f of S.carrinhoFichaOrigem){
     if(f.date<start||f.date>end)continue;
+    if(f.tipo!=="traf"){ fichasOrgByDate[f.date]=(fichasOrgByDate[f.date]||0)+1; continue; }
     fichasByDate[f.date]=(fichasByDate[f.date]||0)+1;
     if(f.comPreco)fichasComPrecoByDate[f.date]=(fichasComPrecoByDate[f.date]||0)+1;
-    if(f.tipo==="traf")fichasTrafByDate[f.date]=(fichasTrafByDate[f.date]||0)+1;
-    else fichasOrgByDate[f.date]=(fichasOrgByDate[f.date]||0)+1;
   }
-  const dates=new Set([...Object.keys(metaByDate),...Object.keys(fichasByDate)]);
+  const dates=new Set([...Object.keys(metaByDate),...Object.keys(fichasByDate),...Object.keys(fichasOrgByDate)]);
   return[...dates].sort().map(d=>{
     const m=metaByDate[d]||{spend:0,clicks:0};
     const fichas=fichasByDate[d]||0, fichasComPreco=fichasComPrecoByDate[d]||0;
     return{date:d,label:fDate(d),spend:m.spend,clicks:m.clicks,fichas,fichasComPreco,
-      fichasTraf:fichasTrafByDate[d]||0, fichasOrg:fichasOrgByDate[d]||0,
+      fichasOrg:fichasOrgByDate[d]||0,
       custoFichaComPreco:fichasComPreco>0?m.spend/fichasComPreco:null};
   });
 }
@@ -3356,14 +3368,13 @@ function renderCarrinhoPrincipal(){
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${!S.carrinhoPrecoKeyFound?`<div class="err" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06);color:#fbbf24">⚠️ Não encontrei a coluna de "forma de pagamento" nas bases de fichas — Custo/ficha com preço fica sem dado até a pergunta existir/ser identificada.</div>`:""}
 
-    <div class="g4" style="margin-bottom:13px">
+    <div class="g3" style="margin-bottom:13px">
       ${kpiCard("Investimento",fBRL(m.spend),"","var(--text-strong)")}
-      ${kpiCard("Cliques",m.clicks.toLocaleString("pt-BR"),"","var(--text-strong)")}
-      ${kpiCard("Fichas totais",m.fichasTotal.toLocaleString("pt-BR"),"","var(--text-strong)")}
-      ${kpiCard("Fichas com preço",m.fichasComPreco.toLocaleString("pt-BR"),"","var(--text-strong)")}
+      ${kpiCard("Fichas totais",m.fichasTotal.toLocaleString("pt-BR"),"só tráfego","var(--text-strong)")}
+      ${kpiCard("Fichas com preço",m.fichasComPreco.toLocaleString("pt-BR"),"só tráfego","var(--text-strong)")}
     </div>
     <div class="g2" style="margin-bottom:20px">
-      ${kpiCard("Custo por ficha (total)",m.custoFicha!=null?fBRL(m.custoFicha):"—","","var(--text-strong)")}
+      ${kpiCard("Custo por ficha (total)",m.custoFicha!=null?fBRL(m.custoFicha):"—","sem meta definida · só tráfego","var(--text-strong)")}
       ${kpiCard("Custo por ficha com preço",m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"—",`Meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,custoColor,false,m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false)}
     </div>
 
@@ -3380,20 +3391,13 @@ function renderCarrinhoPrincipal(){
     </div>
 
     <div class="cc" style="position:relative;margin-bottom:20px">
-      <div class="ch"><span class="ct">Fichas por dia — Total</span></div>
+      <div class="ch"><span class="ct">Fichas por dia (tráfego)</span></div>
       <div style="position:relative"><canvas id="c-carrinho-fichas"></canvas><div class="tip" id="t-carrinho-fichas"></div></div>
     </div>
 
-    <div class="cc" style="position:relative;margin-bottom:14px">
-      <div class="ch"><span class="ct">Fichas por dia — Tráfego</span>
-        <div class="lg"><span class="li"><span class="ll" style="background:${CHART_INV}"></span>Fichas de tráfego</span></div>
-      </div>
-      <div style="position:relative"><canvas id="c-carrinho-fichas-traf"></canvas><div class="tip" id="t-carrinho-fichas-traf"></div></div>
-    </div>
-
     <div class="cc" style="position:relative;margin-bottom:20px">
-      <div class="ch"><span class="ct">Fichas por dia — Orgânico</span>
-        <div class="lg"><span class="li"><span class="ll" style="background:${CHART_QUIZ}"></span>Fichas orgânicas (inclui disparo)</span></div>
+      <div class="ch"><span class="ct">Fichas por dia (orgânico)</span>
+        <div class="lg"><span class="li"><span class="ll" style="background:${CHART_QUIZ}"></span>Orgânico + disparo — volume informativo, fora do custo por ficha</span></div>
       </div>
       <div style="position:relative"><canvas id="c-carrinho-fichas-org"></canvas><div class="tip" id="t-carrinho-fichas-org"></div></div>
     </div>
@@ -3414,13 +3418,8 @@ function renderCarrinhoPrincipal(){
       {name:"Fichas totais",color:CHART_LEAD,key:"fichas",fmt:v=>String(v)},
       {name:"Fichas com preço",color:CHART_CPL,key:"fichasComPreco",fmt:v=>String(v)}],40,12);
 
-    const box3=document.getElementById("c-carrinho-fichas-traf")?.parentElement;
-    if(box3)drawBarSingle("c-carrinho-fichas-traf",daily,"fichasTraf",CHART_INV,box3.clientWidth,200);
-    setupTip("c-carrinho-fichas-traf","t-carrinho-fichas-traf",daily,[
-      {name:"Fichas tráfego",color:CHART_INV,key:"fichasTraf",fmt:v=>String(v)}],40,12);
-
-    const box4=document.getElementById("c-carrinho-fichas-org")?.parentElement;
-    if(box4)drawBarSingle("c-carrinho-fichas-org",daily,"fichasOrg",CHART_QUIZ,box4.clientWidth,200);
+    const box3=document.getElementById("c-carrinho-fichas-org")?.parentElement;
+    if(box3)drawBarSingle("c-carrinho-fichas-org",daily,"fichasOrg",CHART_QUIZ,box3.clientWidth,200);
     setupTip("c-carrinho-fichas-org","t-carrinho-fichas-org",daily,[
       {name:"Fichas orgânicas",color:CHART_QUIZ,key:"fichasOrg",fmt:v=>String(v)}],40,12);
   });
@@ -4346,63 +4345,54 @@ ${aulaResumoTextBlock(3,null)}`;
 // Copia o resumo de UMA etapa por vez (independente do botão da Captação e
 // dos outros dois) — o feedback "✓ Copiado!" aparece só no botão clicado.
 // ── Resumo do Carrinho (aba Resumo diário) ───────────────────────────────
-// Sempre o LANÇAMENTO INTEIRO (start/end = null), igual ao bloco Total da
-// Captação. Meta só no custo por ficha COM PREÇO (R$ 40) — custo por ficha
-// total fica sem meta, por decisão do usuário.
-function carrinhoResumoMetrics(){
-  const m=carrinhoMetrics("0000-01-01","9999-12-31");
-  const vendas=S.carrinhoVendaOrigem||[];
-  const faturamento=vendas.reduce((a,v)=>a+(v.valor||0),0);
-  const invTotal=investimentoTotalLancamento();
-  return{...m,vendas:vendas.length,faturamento,
-    ticket:vendas.length>0?faturamento/vendas.length:null,
-    roas:invTotal>0?faturamento/invTotal:null, invTotal,
-    convFicha:m.fichasTotal>0?(vendas.length/m.fichasTotal)*100:null};
-}
+// Três blocos, igual ao Resumo consolidado da Captação: Total (lançamento
+// inteiro), Ontem e Hoje. Só fichas de TRÁFEGO entram nos custos — orgânico
+// fica restrito à sub-aba Fichas.
+// Metas: custo/ficha COM PREÇO tem meta (META_CARRINHO_CUSTO_FICHA_COM_PRECO);
+// custo/ficha TOTAL fica sem meta, por decisão do usuário.
+function carrinhoBloco(s,e){ return carrinhoMetrics(s===null?"0000-01-01":s, e===null?"9999-12-31":e); }
 function carrinhoResumoHtml(){
-  const m=carrinhoResumoMetrics();
-  const e=metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false);
-  return `
-    ${stageResumoCard("Mídia",
-      stageRow("Investido total",fBRL(m.spend),"","")+
-      stageRow("Cliques",m.clicks.toLocaleString("pt-BR"),"","")
-    )}
-    ${stageResumoCard("Fichas",
-      stageRow("Fichas totais",m.fichasTotal.toLocaleString("pt-BR"),"","")+
+  const hoje=todayISO(), ontem=yesterdayISO();
+  const blocos=[["📶 Total - Consolidado",carrinhoBloco(null,null),""],
+                ["⬅️ Ontem",carrinhoBloco(ontem,ontem),fDateBR(ontem)],
+                ["⬇️ Hoje",carrinhoBloco(hoje,hoje),fDateBR(hoje)]];
+  return blocos.map(([t,m,d])=>stageResumoCard(`${t}${d?" — "+d:""}`,
+      stageRow("Investimento",fBRL(m.spend),"","")+
       stageRow("Fichas com preço",m.fichasComPreco.toLocaleString("pt-BR"),"","")+
-      stageRow("Custo por ficha (total)",m.custoFicha!=null?fBRL(m.custoFicha):"—","sem meta definida","")+
-      stageRow("Custo por ficha com preço",m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"—",`Meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,e)
-    )}
-    ${stageResumoCard("Vendas",
-      stageRow("Vendas",m.vendas.toLocaleString("pt-BR"),"","")+
-      stageRow("Faturamento",fBRL(m.faturamento),"","")+
-      stageRow("Ticket médio",m.ticket!=null?fBRL(m.ticket):"—","","")+
-      stageRow("Conversão ficha → venda",m.convFicha!=null?fPct(m.convFicha):"—","","")+
-      stageRow("ROAS",m.roas!=null?m.roas.toFixed(2).replace(".",","):"—",`invest. total: ${fBRL(m.invTotal)}`,"")
-    )}
-    <div style="font-size:10px;color:var(--hint);max-width:640px">ROAS = faturamento ÷ investimento de tráfego do lançamento inteiro (captação + aquecimento + lembrete + aulas + carrinho).</div>`;
+      stageRow("Custo/ficha com preço",m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"--",`Meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false))+
+      stageRow("Fichas totais",m.fichasTotal.toLocaleString("pt-BR"),"","")+
+      stageRow("Custo/ficha total",m.custoFicha!=null?fBRL(m.custoFicha):"--","sem meta definida","")+
+      stageRow("CPC",m.cpc!=null?fBRL(m.cpc):fBRL(0),"","")+
+      stageRow("CTR",m.ctr!=null?fPct(m.ctr):fPct(0),"","")+
+      stageRow("CPM",m.cpm!=null?fBRL(m.cpm):fBRL(0),"","")+
+      stageRow("Tx conversão formulário",m.txConvForm!=null?fPct(m.txConvForm):fPct(0),"","")
+    )).join("")+
+    `<div style="font-size:10px;color:var(--hint);max-width:640px">Só fichas de tráfego entram nos custos — as orgânicas/disparo aparecem apenas na sub-aba Fichas. Tx conversão formulário = fichas de tráfego ÷ cliques no link.</div>`;
 }
 function carrinhoResumoText(){
-  const m=carrinhoResumoMetrics();
-  const e=metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false);
-  return `*tdo_ago26 - Resumo Carrinho*
+  const hoje=todayISO(), ontem=yesterdayISO();
+  function bloco(titulo,m){
+    return `${titulo}
 
--> Mídia
-Investido total:\t${fBRL(m.spend)}
-Cliques:\t${m.clicks.toLocaleString("pt-BR")}
-
--> Fichas
-Fichas totais:\t${m.fichasTotal.toLocaleString("pt-BR")}
+Investimento:\t${fBRL(m.spend)}
 Fichas com preço:\t${m.fichasComPreco.toLocaleString("pt-BR")}
-Custo por ficha (total):\t${m.custoFicha!=null?fBRL(m.custoFicha):"—"}
-Custo por ficha com preço:\t${m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"—"}\t${e} (🎯: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)})
+Custo/ ficha com preço:\t${m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"--"}\t${metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false)} (meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)})
 
--> Vendas
-Vendas:\t${m.vendas.toLocaleString("pt-BR")}
-Faturamento:\t${fBRL(m.faturamento)}
-Ticket médio:\t${m.ticket!=null?fBRL(m.ticket):"—"}
-Conversão ficha → venda:\t${m.convFicha!=null?fPct(m.convFicha):"—"}
-ROAS:\t${m.roas!=null?m.roas.toFixed(2).replace(".",","):"—"}\t(invest. total do lançamento: ${fBRL(m.invTotal)})`;
+Fichas totais:\t${m.fichasTotal.toLocaleString("pt-BR")}
+Custo/ficha total:\t${m.custoFicha!=null?fBRL(m.custoFicha):"--"}
+
+CPC:\t${m.cpc!=null?fBRL(m.cpc):fBRL(0)}
+CTR:\t${m.ctr!=null?fPct(m.ctr):fPct(0)}
+CPM:\t${m.cpm!=null?fBRL(m.cpm):fBRL(0)}
+Tx conversão formulário:\t${m.txConvForm!=null?fPct(m.txConvForm):fPct(0)}`;
+  }
+  return `tdo_ago26 | Carrinho
+
+${bloco("Total - Consolidado",carrinhoBloco(null,null))}
+---------------------
+${bloco("Ontem\t"+fDateBR(ontem),carrinhoBloco(ontem,ontem))}
+---------------------
+${bloco("Hoje\t"+fDateBR(hoje),carrinhoBloco(hoje,hoje))}`;
 }
 function copyStageResumo(scope,btn){
   let text="";
