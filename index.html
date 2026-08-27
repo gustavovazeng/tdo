@@ -364,6 +364,10 @@ const SHEET_CARRINHO_VENDAS_NAME = "Base vendas";
 // captação" filtrada por nome de campanha). Com a aba separada, o
 // investimento do Carrinho não aparecia em lugar nenhum do dashboard.
 const SHEET_CARRINHO_META_NAME = "Base Meta - Carrinho";
+// Lives da captação — mídia própria, mesmas colunas da "Base Meta - captação".
+// Não tem planejamento (planejado = R$ 0); entra só como linha de realizado
+// no "Resumo por etapa" do Planejado/Realizado.
+const SHEET_LIVES_CAPTACAO_NAME = "Base Meta - lives captação";
 // Dados de página (GA4) — usados pra Connect Rate e Tx conv Pg cadastro na
 // aba Métricas do Tráfego e no Resumo diário.
 const SHEET_GA4_NAME = "Base GA4";
@@ -467,6 +471,7 @@ const S = {
   aquecimentoRows:[],    // linhas da Base Meta - aquecimento: {date,campName,adName,igUrl,spend,clicks,impressions,video75}
   lembreteRows:[],       // idem, Base Meta - lembrete
   carrinhoMetaRows:[],   // linhas da Base Meta - Carrinho (mídia da etapa de Carrinho)
+  livesCaptacaoRows:[],  // linhas da Base Meta - lives captação (só realizado, sem plano)
   aulasRows:[],          // idem, Base Meta - Aulas (uma ou mais campanhas por aula, ver aulaNumberFromCampaign)
   manualAlcance:{aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null}, // Alcance manual (API não fornece) — usado pra calcular Frequência
   // Estado das páginas de análise por etapa (Aquecimento/Lembrete/Aula01/02/03/Consolidado)
@@ -530,7 +535,7 @@ function resetFunilData(){
   S.meta={}; S.metaRows=[]; S.adIdMap={};
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};
   S.ga4Rows=[]; S.likesRows=[];
-  S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[];
+  S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[]; S.livesCaptacaoRows=[];
   S.manualAlcance={aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null};
   S.carrinhoFichaAttrib=[]; S.carrinhoFichaOrigem=[]; S.carrinhoFichaOrigemUnica=[];
   S.carrinhoTrafego={}; S.carrinhoTrafegoComPreco={};
@@ -1463,6 +1468,17 @@ async function loadData(){
       render();
     }catch(e){
       console.error("Erro ao carregar a mídia do Carrinho (Base Meta - Carrinho):",e);
+    }
+  })();
+
+  // Lives da captação (aba própria, só realizado).
+  (async()=>{
+    try{
+      const livesCsv = await fetchSheetCSV(SHEET_LIVES_CAPTACAO_NAME);
+      S.livesCaptacaoRows = parseStageRows(parseRows(parseCSVText(livesCsv)));
+      render();
+    }catch(e){
+      console.error("Erro ao carregar as lives da captação (Base Meta - lives captação):",e);
     }
   })();
 
@@ -4752,6 +4768,8 @@ function renderPlanoReal(){
   // etc. só por coincidência de data.
   const etapas=[
     {nome:"Captação",plan:totalInvestPlan,real:totalSpendForStage("Captação")},
+    // Lives da captação: sem planejamento (plan = 0), realizado direto da aba.
+    {nome:"Lives captação",plan:0,real:(S.livesCaptacaoRows||[]).reduce((a,r)=>a+(r.spend||0),0)},
     {nome:"Aquecimento",plan:PLANO_AQUECIMENTO.reduce((a,p)=>a+p.investimento,0)||PLANO_AQUECIMENTO_TOTAL,real:totalSpendForStage("Aquecimento")},
     {nome:"Lembrete",plan:PLANO_LEMBRETE.reduce((a,p)=>a+p.investimento,0),real:totalSpendForStage("Lembrete")},
     {nome:"Aulas",plan:PLANO_AULAS.reduce((a,p)=>a+p.investimento,0),real:totalSpendForStage("Aulas")},
