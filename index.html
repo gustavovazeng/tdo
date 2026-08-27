@@ -360,6 +360,10 @@ const SHEET_CARRINHO_TRAFEGO_NAME = "Base fichas - Tráfego";
 const SHEET_CARRINHO_ORGANICO_NAME = "Base fichas - orgânico";
 const SHEET_CARRINHO_DISPARO_NAME = "Base fichas - disparo";
 const SHEET_CARRINHO_VENDAS_NAME = "Base vendas";
+// Mídia do Carrinho — ganhou aba própria (antes vinha da "Base Meta -
+// captação" filtrada por nome de campanha). Com a aba separada, o
+// investimento do Carrinho não aparecia em lugar nenhum do dashboard.
+const SHEET_CARRINHO_META_NAME = "Base Meta - Carrinho";
 // Dados de página (GA4) — usados pra Connect Rate e Tx conv Pg cadastro na
 // aba Métricas do Tráfego e no Resumo diário.
 const SHEET_GA4_NAME = "Base GA4";
@@ -462,6 +466,7 @@ const S = {
   likesRows:[],          // linhas da Contagem likes: {date,time,likes}
   aquecimentoRows:[],    // linhas da Base Meta - aquecimento: {date,campName,adName,igUrl,spend,clicks,impressions,video75}
   lembreteRows:[],       // idem, Base Meta - lembrete
+  carrinhoMetaRows:[],   // linhas da Base Meta - Carrinho (mídia da etapa de Carrinho)
   aulasRows:[],          // idem, Base Meta - Aulas (uma ou mais campanhas por aula, ver aulaNumberFromCampaign)
   manualAlcance:{aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null}, // Alcance manual (API não fornece) — usado pra calcular Frequência
   // Estado das páginas de análise por etapa (Aquecimento/Lembrete/Aula01/02/03/Consolidado)
@@ -525,7 +530,7 @@ function resetFunilData(){
   S.meta={}; S.metaRows=[]; S.adIdMap={};
   S.leadsRows=[]; S.leadsRowsRaw=[]; S.leadsByDate={};
   S.ga4Rows=[]; S.likesRows=[];
-  S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[];
+  S.aquecimentoRows=[]; S.lembreteRows=[]; S.aulasRows=[]; S.carrinhoMetaRows=[];
   S.manualAlcance={aquecimento:null,lembrete:null,aula01:null,aula02:null,aula03:null,aulasConsolidado:null};
   S.carrinhoFichaAttrib=[]; S.carrinhoFichaOrigem=[]; S.carrinhoFichaOrigemUnica=[];
   S.carrinhoTrafego={}; S.carrinhoTrafegoComPreco={};
@@ -893,7 +898,15 @@ function campaignStage(campName){
 // campaignStage, mas as campanhas dessas 3 etapas não estão nessa sheet (só
 // nas sheets próprias) — por isso "Planejado/Realizado" sempre mostrava
 // R$0,00 de realizado ali, mesmo com investimento normal nas outras abas.
+// Mídia do Carrinho: usa a aba própria quando existir; se estiver vazia,
+// cai no comportamento antigo (Base Meta - captação filtrada por campanha),
+// pra não quebrar lançamentos que não têm a aba separada.
+function carrinhoMetaRows(){
+  if(S.carrinhoMetaRows&&S.carrinhoMetaRows.length)return S.carrinhoMetaRows;
+  return S.metaRows.filter(r=>campaignStage(r.campName)==="Carrinho");
+}
 function stageRowsForStage(stage){
+  if(stage==="Carrinho")return carrinhoMetaRows();
   if(stage==="Aquecimento")return S.aquecimentoRows||[];
   if(stage==="Lembrete")return S.lembreteRows||[];
   if(stage==="Aulas")return S.aulasRows||[];
@@ -1439,6 +1452,17 @@ async function loadData(){
       render();
     }catch(e){
       console.error("Erro ao carregar dados das etapas (Aquecimento/Lembrete/Aulas):",e);
+    }
+  })();
+
+  // Mídia do Carrinho (aba própria).
+  (async()=>{
+    try{
+      const carrinhoMetaCsv = await fetchSheetCSV(SHEET_CARRINHO_META_NAME);
+      S.carrinhoMetaRows = parseStageRows(parseRows(parseCSVText(carrinhoMetaCsv)));
+      render();
+    }catch(e){
+      console.error("Erro ao carregar a mídia do Carrinho (Base Meta - Carrinho):",e);
     }
   })();
 
@@ -2968,6 +2992,7 @@ ${textBlock("Hoje",hoje,fDateBR(today),ch_,planForDate(today),null,true)}`;
     ${stageResumoSection("🔥 Resumo Aquecimento",`dados carregados: ${S.aquecimentoRows.length} linha(s)`,aquecimentoResumoHtml(),"aquecimento",aquecimentoResumoText())}
     ${stageResumoSection("🔔 Resumo Lembrete",`dados carregados: ${S.lembreteRows.length} linha(s)`,lembreteResumoHtml(),"lembrete",lembreteResumoText())}
     ${stageResumoSection("🎓 Resumo Aulas","3 aulas · identificadas pelo nome da campanha",aulasResumoHtml(),"aulas",aulasResumoText())}
+    ${stageResumoSection("🛒 Resumo Carrinho",`mídia: ${carrinhoMetaRows().length} linha(s) · fichas: ${(S.carrinhoFichaOrigem||[]).length} · vendas: ${(S.carrinhoVendaOrigem||[]).length}`,carrinhoResumoHtml(),"carrinho",carrinhoResumoText())}
 
     <div class="foot">TDO · Captação · dados locais (CSV embutido)</div>`;
   el._resumoText=resumoText;
@@ -3270,7 +3295,7 @@ function renderStagePage(pageId,label,planArr){
 // mídia própria, suas campanhas só se identificam pelo nome, igual às outras
 // etapas. Fichas vêm das 3 sheets processadas em processCarrinhoFichas().
 function carrinhoMetaRowsInRange(start,end){
-  return S.metaRows.filter(r=>r.date>=start&&r.date<=end&&campaignStage(r.campName)==="Carrinho");
+  return carrinhoMetaRows().filter(r=>r.date>=start&&r.date<=end);
 }
 function carrinhoFichasInRange(fichas,start,end){
   return fichas.filter(f=>f.date>=start&&f.date<=end);
@@ -3288,8 +3313,7 @@ function carrinhoMetrics(start,end){
 }
 function getCarrinhoDaily(start,end){
   const metaByDate={};
-  for(const r of S.metaRows){
-    if(campaignStage(r.campName)!=="Carrinho")continue;
+  for(const r of carrinhoMetaRows()){
     if(r.date<start||r.date>end)continue;
     if(!metaByDate[r.date])metaByDate[r.date]={spend:0,clicks:0};
     metaByDate[r.date].spend+=r.spend;metaByDate[r.date].clicks+=r.clicks;
@@ -4321,11 +4345,71 @@ ${aulaResumoTextBlock(3,null)}`;
 }
 // Copia o resumo de UMA etapa por vez (independente do botão da Captação e
 // dos outros dois) — o feedback "✓ Copiado!" aparece só no botão clicado.
+// ── Resumo do Carrinho (aba Resumo diário) ───────────────────────────────
+// Sempre o LANÇAMENTO INTEIRO (start/end = null), igual ao bloco Total da
+// Captação. Meta só no custo por ficha COM PREÇO (R$ 40) — custo por ficha
+// total fica sem meta, por decisão do usuário.
+function carrinhoResumoMetrics(){
+  const m=carrinhoMetrics("0000-01-01","9999-12-31");
+  const vendas=S.carrinhoVendaOrigem||[];
+  const faturamento=vendas.reduce((a,v)=>a+(v.valor||0),0);
+  const invTotal=investimentoTotalLancamento();
+  return{...m,vendas:vendas.length,faturamento,
+    ticket:vendas.length>0?faturamento/vendas.length:null,
+    roas:invTotal>0?faturamento/invTotal:null, invTotal,
+    convFicha:m.fichasTotal>0?(vendas.length/m.fichasTotal)*100:null};
+}
+function carrinhoResumoHtml(){
+  const m=carrinhoResumoMetrics();
+  const e=metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false);
+  return `
+    ${stageResumoCard("Mídia",
+      stageRow("Investido total",fBRL(m.spend),"","")+
+      stageRow("Cliques",m.clicks.toLocaleString("pt-BR"),"","")
+    )}
+    ${stageResumoCard("Fichas",
+      stageRow("Fichas totais",m.fichasTotal.toLocaleString("pt-BR"),"","")+
+      stageRow("Fichas com preço",m.fichasComPreco.toLocaleString("pt-BR"),"","")+
+      stageRow("Custo por ficha (total)",m.custoFicha!=null?fBRL(m.custoFicha):"—","sem meta definida","")+
+      stageRow("Custo por ficha com preço",m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"—",`Meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,e)
+    )}
+    ${stageResumoCard("Vendas",
+      stageRow("Vendas",m.vendas.toLocaleString("pt-BR"),"","")+
+      stageRow("Faturamento",fBRL(m.faturamento),"","")+
+      stageRow("Ticket médio",m.ticket!=null?fBRL(m.ticket):"—","","")+
+      stageRow("Conversão ficha → venda",m.convFicha!=null?fPct(m.convFicha):"—","","")+
+      stageRow("ROAS",m.roas!=null?m.roas.toFixed(2).replace(".",","):"—",`invest. total: ${fBRL(m.invTotal)}`,"")
+    )}
+    <div style="font-size:10px;color:var(--hint);max-width:640px">ROAS = faturamento ÷ investimento de tráfego do lançamento inteiro (captação + aquecimento + lembrete + aulas + carrinho).</div>`;
+}
+function carrinhoResumoText(){
+  const m=carrinhoResumoMetrics();
+  const e=metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false);
+  return `*tdo_ago26 - Resumo Carrinho*
+
+-> Mídia
+Investido total:\t${fBRL(m.spend)}
+Cliques:\t${m.clicks.toLocaleString("pt-BR")}
+
+-> Fichas
+Fichas totais:\t${m.fichasTotal.toLocaleString("pt-BR")}
+Fichas com preço:\t${m.fichasComPreco.toLocaleString("pt-BR")}
+Custo por ficha (total):\t${m.custoFicha!=null?fBRL(m.custoFicha):"—"}
+Custo por ficha com preço:\t${m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"—"}\t${e} (🎯: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)})
+
+-> Vendas
+Vendas:\t${m.vendas.toLocaleString("pt-BR")}
+Faturamento:\t${fBRL(m.faturamento)}
+Ticket médio:\t${m.ticket!=null?fBRL(m.ticket):"—"}
+Conversão ficha → venda:\t${m.convFicha!=null?fPct(m.convFicha):"—"}
+ROAS:\t${m.roas!=null?m.roas.toFixed(2).replace(".",","):"—"}\t(invest. total do lançamento: ${fBRL(m.invTotal)})`;
+}
 function copyStageResumo(scope,btn){
   let text="";
   if(scope==="aquecimento")text=aquecimentoResumoText();
   else if(scope==="lembrete")text=lembreteResumoText();
   else if(scope==="aulas")text=aulasResumoText();
+  else if(scope==="carrinho")text=carrinhoResumoText();
   if(!text||!btn)return;
   navigator.clipboard.writeText(text).then(()=>{
     const orig=btn.innerHTML;btn.innerHTML="✓ Copiado!";btn.style.color="#4ade80";
