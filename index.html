@@ -1037,13 +1037,26 @@ function processCarrinhoFichas(trafRowsRaw,orgRowsRaw,dispRowsRaw){
   S.carrinhoFichaOrigem=fichaOrigem;
   S.carrinhoFichaOrigemUnica=dedupFichasByContact(fichaOrigem);
 }
-// Casa vendas ("Base vendas": Nome/Email/Whatsapp1/Data Correta/UTM Source —
-// sem valor de venda, então não dá pra calcular faturamento/ROAS aqui) com a
+// Casa vendas ("Base vendas") com a
 // ficha mais antiga da pessoa (tráfego ou orgânico, o que veio primeiro),
 // batendo por telefone OU e-mail. Precisa rodar DEPOIS de processCarrinhoFichas
 // (usa S.carrinhoFichaOrigem já processado como fonte de verdade de quem
 // preencheu o quê). "Data Correta" já vem certa (sem ajuste de fuso) — mesmo
 // tratamento do modelo original.
+// Busca tolerante de coluna: ignora acento, hífen, espaço e caixa no
+// cabeçalho. Necessário porque a "Base vendas" já veio com "Email" num
+// lançamento e "E-mail" em outro, e "Telefone" ora maiúsculo ora minúsculo —
+// com a busca exata anterior, TODA venda ficava sem atribuição em silêncio.
+function getCol(r,...alts){
+  const norm=k=>String(k||"").normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const chaves=Object.keys(r);
+  for(const alt of alts){
+    const a=norm(alt);
+    const hit=chaves.find(k=>norm(k)===a);
+    if(hit!=null&&String(r[hit]||"").trim()!=="")return r[hit];
+  }
+  return "";
+}
 function processCarrinhoVendas(vendasRowsRaw){
   const earliestByPhone={}, earliestByEmail={};
   for(const f of S.carrinhoFichaOrigem){
@@ -1053,12 +1066,15 @@ function processCarrinhoVendas(vendasRowsRaw){
   const vendaAttrib=[], vendaOrigem=[], porDia={};
   let total=0, matched=0, unmatched=0;
   for(const r of vendasRowsRaw){
-    const nome=(r["Nome"]||"").trim();
-    const ph=normalizePhone(r["Whatsapp1"]||r["Whatsapp"]||r["Telefone"]);
-    const em=normalizeEmail(r["Email"]);
+    const nome=String(getCol(r,"Nome","Name")||"").trim();
+    const ph=normalizePhone(getCol(r,"Whatsapp1","Whatsapp","Telefone","Celular","Phone"));
+    const em=normalizeEmail(getCol(r,"E-mail","Email","Mail"));
     if(!nome&&!ph&&!em)continue; // linha vazia
     total++;
-    const ms=parseFichaDateTimeMs(r["Data Correta"]);
+    // "valor" da venda — agora existe na Base vendas (não existia antes),
+    // então dá pra somar faturamento por origem/anúncio.
+    const valor=parseBRL(getCol(r,"valor","Valor","Preço","Price"));
+    const ms=parseFichaDateTimeMs(getCol(r,"Data Correta","Data","Data da venda","created_at"));
     const d=ms!=null?msToISO(ms):null;
     if(d)porDia[d]=(porDia[d]||0)+1;
     const candidates=[];
@@ -1070,9 +1086,9 @@ function processCarrinhoVendas(vendasRowsRaw){
       matched++;
       const vd=d||best.date; // fallback pra data da ficha se "Data Correta" vier vazia/quebrada
       if(best.tipo==="traf"){
-        vendaAttrib.push({date:vd,adName:best.adName||"(sem atribuição)",campName:best.campName||"(sem atribuição)"});
+        vendaAttrib.push({date:vd,valor,adName:best.adName||"(sem atribuição)",campName:best.campName||"(sem atribuição)"});
       }
-      vendaOrigem.push({date:vd,tipo:best.tipo,origem:best.origem,canal:best.canal,comPreco:best.comPreco});
+      vendaOrigem.push({date:vd,valor,tipo:best.tipo,origem:best.origem,canal:best.canal,comPreco:best.comPreco});
     }else{
       unmatched++;
     }
@@ -1081,6 +1097,7 @@ function processCarrinhoVendas(vendasRowsRaw){
   S.carrinhoVendaOrigem=vendaOrigem;
   S.carrinhoVendasPorDia=porDia;
   S.carrinhoVendasTotal=total; S.carrinhoVendasMatched=matched; S.carrinhoVendasUnmatched=unmatched;
+  S.carrinhoFaturamento=vendaOrigem.reduce((a,v)=>a+(v.valor||0),0);
 }
 
 // ── Base GA4 (dados de página) ──────────────────────────────────────────────
