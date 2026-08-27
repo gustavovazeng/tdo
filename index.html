@@ -3703,13 +3703,18 @@ function getCarrinhoVendasDaily(start,end){
   return Object.keys(S.carrinhoVendasPorDia).filter(d=>d>=start&&d<=end).sort()
     .map(d=>({date:d,label:fDate(d),vendas:S.carrinhoVendasPorDia[d]}));
 }
-// Investimento TOTAL de tráfego do lançamento inteiro, somando TODAS as
-// etapas: captação, aquecimento, lembrete, aulas e carrinho. É a base do
-// ROAS do carrinho — a venda no fim do funil é fruto de tudo que foi gasto
-// antes, não só da verba do próprio carrinho.
+// Investimento TOTAL de tráfego do lançamento inteiro: captação, lives da
+// captação, aquecimento, lembrete, aulas e carrinho. É a base do ROAS do
+// carrinho — a venda no fim do funil é fruto de tudo que foi gasto antes,
+// não só da verba do próprio carrinho.
+// O filtro na Base Meta - captação evita contar o Carrinho DUAS vezes: se
+// alguma campanha de carrinho ainda estiver naquela aba, ela é descartada
+// aqui e o valor vem de carrinhoMetaRows(), que é a fonte oficial da etapa.
 function investimentoTotalLancamento(){
   const soma=arr=>(arr||[]).reduce((a,r)=>a+(r.spend||0),0);
-  return soma(S.metaRows)          // Base Meta - captação (inclui campanhas de Carrinho)
+  return soma((S.metaRows||[]).filter(r=>campaignStage(r.campName)!=="Carrinho"))
+        +soma(S.livesCaptacaoRows)
+        +soma(carrinhoMetaRows())
         +soma(S.aquecimentoRows)
         +soma(S.lembreteRows)
         +soma(S.aulasRows);
@@ -3743,7 +3748,7 @@ function renderCarrinhoVendas(){
     </div>
     ${S.error?`<div class="err">⚠️ ${S.error}</div>`:""}
     ${S.carrinhoVendasTotal===0?`<div class="err" style="border-color:rgba(251,191,36,.3);background:rgba(251,191,36,.06);color:#fbbf24">⚠️ Nenhuma venda encontrada na aba "Base vendas" ainda.</div>`:""}
-    <div style="font-size:10px;color:var(--hint);margin-bottom:14px">Faturamento e ROAS consideram o LANÇAMENTO INTEIRO, sem o filtro de datas do cabeçalho (os demais cartões respeitam o período). ROAS = faturamento ÷ investimento de tráfego do lançamento INTEIRO (captação + aquecimento + lembrete + aulas + carrinho), não só a verba do carrinho.</div>
+    <div style="font-size:10px;color:var(--hint);margin-bottom:14px">Faturamento e ROAS consideram o LANÇAMENTO INTEIRO, sem o filtro de datas do cabeçalho (os demais cartões respeitam o período). ROAS = faturamento ÷ investimento de tráfego do lançamento INTEIRO (captação + lives + aquecimento + lembrete + aulas + carrinho), não só a verba do carrinho.</div>
 
     <div class="g4" style="margin-bottom:13px">
       ${kpiCard("Faturamento total",fBRL(faturamento),`${vendasPer.length.toLocaleString("pt-BR")} venda(s) · lançamento inteiro`,"#34d399")}
