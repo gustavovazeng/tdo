@@ -287,6 +287,12 @@ const FUNIS = {
     cplBenchmark:null,
     // Meta do Carrinho: custo por ficha COM PREÇO — menor é melhor.
     metaCarrinhoCustoFichaComPreco:40,
+    // Meta do custo por ficha TOTAL (todas as fichas de tráfego) — menor é melhor.
+    metaCarrinhoCustoFichaTotal:15,
+    // Custo por ficha COM PREÇO congelado: em 28/08 o preço saiu do
+    // formulário, então esse indicador parou de evoluir. O valor abaixo é o
+    // último número real e é exibido FIXO no Resumo diário do Carrinho.
+    carrinhoCustoFichaComPrecoFixo:52.93,
     // Planejamento diário — Captação de 13/08 a 24/08. "leads" recalculado a
     // partir do investimento diário ÷ meta de CPL (leads = round(inv/6.50)).
     // Replanejamento de 19/08: teto da captação passou para R$ 105.000.
@@ -419,6 +425,8 @@ function lembreteBenchHoje(){
 const CPL_HOURS = ["09:30","10:30","11:30","12:30","13:30","14:30","15:30","16:30","17:30","18:30","19:30"];
 let CPL_BENCHMARK_OUT25 = FUNIS.tdo.cplBenchmark;
 let META_CARRINHO_CUSTO_FICHA_COM_PRECO = FUNIS.tdo.metaCarrinhoCustoFichaComPreco;
+let META_CARRINHO_CUSTO_FICHA_TOTAL = FUNIS.tdo.metaCarrinhoCustoFichaTotal;
+let CARRINHO_CUSTO_FICHA_COM_PRECO_FIXO = FUNIS.tdo.carrinhoCustoFichaComPrecoFixo;
 let PLANO_DIARIO = FUNIS.tdo.planoDiario;
 // Soma do plano (Captação) até hoje — usado na aba Principal pros cartões
 // "planejado até hoje" e "% atingimento da meta".
@@ -573,6 +581,8 @@ function switchFunil(key){
   LEMBRETE_BENCH_DIA=f.lembreteBenchDia;
   CPL_BENCHMARK_OUT25=f.cplBenchmark;
   META_CARRINHO_CUSTO_FICHA_COM_PRECO=f.metaCarrinhoCustoFichaComPreco;
+  META_CARRINHO_CUSTO_FICHA_TOTAL=f.metaCarrinhoCustoFichaTotal;
+  CARRINHO_CUSTO_FICHA_COM_PRECO_FIXO=f.carrinhoCustoFichaComPrecoFixo;
   PLANO_DIARIO=f.planoDiario;
   PLANO_AQUECIMENTO=f.planoAquecimento;
   PLANO_AQUECIMENTO_TOTAL=f.planoAquecimentoTotal;
@@ -1972,6 +1982,26 @@ function initCanvas(id,cssW,cssH){
   const ctx=c.getContext("2d");ctx.scale(DPR,DPR);
   return ctx;
 }
+// ── Marco visual: dia em que o PREÇO saiu da ficha ────────────────────────
+// A partir de 28/08/2026 a pergunta de forma de pagamento saiu do formulário,
+// então "ficha com preço" para de crescer nesse dia. A linha vermelha
+// tracejada aparece em TODOS os gráficos diários pra deixar o corte visível —
+// sem ela, a queda parece piora de performance quando é mudança de coleta.
+const MARCO_SEM_PRECO="2026-08-28";
+function drawMarco(ctx,data,xP,top,height){
+  if(!Array.isArray(data))return;
+  const i=data.findIndex(d=>d&&d.date===MARCO_SEM_PRECO);
+  if(i<0)return;
+  const x=xP(i);
+  ctx.save();
+  ctx.setLineDash([4,3]);
+  ctx.strokeStyle="#f87171"; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(x,top); ctx.lineTo(x,top+height); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle="#f87171"; ctx.font="8px 'DM Mono',monospace"; ctx.textAlign="center";
+  ctx.fillText("28/08 · sem preço",x,top+8);
+  ctx.restore();
+}
 function drawLineArea(ctx,xP,yP,vals,color,fill=true){
   if(vals.length<2)return;
   if(fill){
@@ -2019,6 +2049,7 @@ function drawDualInvCpl(id,data,cssW,cssH){
   const step=data.length>60?7:data.length>30?3:data.length>14?2:1;
   ctx.fillStyle=TICK_C;ctx.font="10px 'DM Mono',monospace";ctx.textAlign="center";ctx.setLineDash([]);
   data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,xP(i),P.t+cH+18);});
+  drawMarco(ctx,data,xP,P.t,cH);
 }
 // Mesmo gráfico dual do drawDualInvCpl (Investimento × métrica no eixo
 // direito), mas genérico: aceita qual campo do "data" usar no eixo direito e
@@ -2057,6 +2088,7 @@ function drawDualInvMetric(id,data,cssW,cssH,metricKey,metaVal){
   const step=data.length>60?7:data.length>30?3:data.length>14?2:1;
   ctx.fillStyle=TICK_C;ctx.font="10px 'DM Mono',monospace";ctx.textAlign="center";ctx.setLineDash([]);
   data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,xP(i),P.t+cH+18);});
+  drawMarco(ctx,data,xP,P.t,cH);
 }
 function drawBars(ctx,xP,yP,yZero,vals,color,barW){
   vals.forEach((v,i)=>{
@@ -2094,6 +2126,7 @@ function drawBarSingle(id,data,key,color,cssW,cssH){
   });
   ctx.fillStyle=TICK_C;ctx.font="9px 'DM Mono',monospace";
   data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,xP(i),P.t+cH+18);});
+  drawMarco(ctx,data,xP,P.t,cH);
 }
 // Barras de % do investimento por dia (valor de cada dia ÷ total do período) —
 // mesmo esqueleto do drawBarSingle, mas rotulando cada barra em % em vez de
@@ -2127,6 +2160,7 @@ function drawBarPercent(id,data,key,totalVal,color,cssW,cssH){
   });
   ctx.fillStyle=TICK_C;ctx.font="9px 'DM Mono',monospace";
   data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,xP(i),P.t+cH+18);});
+  drawMarco(ctx,data,xP,P.t,cH);
 }
 // Barras (leads/dia, eixo esq.) + linha opcional de GAP% (gerenciador × planilha, eixo dir.)
 function drawBarWithGap(id,data,barKey,gapKey,barColor,gapColor,cssW,cssH,showGap){
@@ -2176,6 +2210,7 @@ function drawBarWithGap(id,data,barKey,gapKey,barColor,gapColor,cssW,cssH,showGa
   }
   ctx.fillStyle=TICK_C;ctx.font="9px 'DM Mono',monospace";ctx.textAlign="center";
   data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,xP(i),P.t+cH+18);});
+  drawMarco(ctx,data,xP,P.t,cH);
 }
 // Múltiplas linhas de % (0-100) — usado nas séries diárias de qualidade
 // (Faixa A+/A/B/C/D/E, Conhece Ramon/AD). Pontos nulos (sem resposta no dia) quebram
@@ -2233,6 +2268,7 @@ function drawMultiLine(id,data,series,cssW,cssH,showLabels=false){
   const step=n>60?7:n>30?3:n>14?2:1;
   ctx.fillStyle=TICK_C;ctx.font="9px 'DM Mono',monospace";ctx.textAlign="center";
   data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,xP(i),P.t+cH+18);});
+  drawMarco(ctx,data,xP,P.t,cH);
 }
 function setupTip(cid,tid,data,lines,padL=58,padR=12){
   const c=document.getElementById(cid),t=document.getElementById(tid);
@@ -3144,6 +3180,7 @@ function drawMetricLine(id,data,key,color,metaVal,cssW,cssH,fmt){
   const step=n>60?7:n>30?3:n>14?2:1;
   ctx.fillStyle=TICK_C;ctx.font="9px 'DM Mono',monospace";ctx.textAlign="center";
   data.forEach((d,i)=>{if(i%step===0)ctx.fillText(d.label,xP(i),P.t+cH+18);});
+  drawMarco(ctx,data,xP,P.t,cH);
 }
 // Mesma métrica em BARRAS em vez de linha — usado quando o período é curto
 // demais (ex.: 1-2 dias, caso das Aulas) e uma linha não mostra nada de
@@ -3192,6 +3229,7 @@ function drawMetricBar(id,data,key,color,metaVal,cssW,cssH,fmt){
   });
   ctx.fillStyle=TICK_C;ctx.font="9px 'DM Mono',monospace";ctx.textAlign="center";
   data.forEach((d,i)=>ctx.fillText(d.label,xP(i),P.t+cH+18));
+  drawMarco(ctx,data,xP,P.t,cH);
 }
 function renderMetricasTrafego(){
   const el=document.getElementById("page-metricas");if(!el)return;
@@ -3390,7 +3428,7 @@ function renderCarrinhoPrincipal(){
       ${kpiCard("Fichas com preço",m.fichasComPreco.toLocaleString("pt-BR"),"só tráfego","var(--text-strong)")}
     </div>
     <div class="g2" style="margin-bottom:20px">
-      ${kpiCard("Custo por ficha (total)",m.custoFicha!=null?fBRL(m.custoFicha):"—","sem meta definida · só tráfego","var(--text-strong)")}
+      ${kpiCard("Custo por ficha (total)",m.custoFicha!=null?fBRL(m.custoFicha):"—",`Meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_TOTAL)} · só tráfego`,m.custoFicha!=null?statusColor(m.custoFicha,META_CARRINHO_CUSTO_FICHA_TOTAL,false):"var(--text-strong)",false,m.custoFicha,META_CARRINHO_CUSTO_FICHA_TOTAL,false)}
       ${kpiCard("Custo por ficha com preço",m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"—",`Meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,custoColor,false,m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false)}
     </div>
 
@@ -4374,15 +4412,18 @@ ${aulaResumoTextBlock(3,null)}`;
 function carrinhoBloco(s,e){ return carrinhoMetrics(s===null?"0000-01-01":s, e===null?"9999-12-31":e); }
 function carrinhoResumoHtml(){
   const hoje=todayISO(), ontem=yesterdayISO();
-  const blocos=[["📶 Total - Consolidado",carrinhoBloco(null,null),""],
-                ["⬅️ Ontem",carrinhoBloco(ontem,ontem),fDateBR(ontem)],
-                ["⬇️ Hoje",carrinhoBloco(hoje,hoje),fDateBR(hoje)]];
-  return blocos.map(([t,m,d])=>stageResumoCard(`${t}${d?" — "+d:""}`,
+  // custo/ficha COM PREÇO: fixo só no Total (o preço saiu da ficha em 28/08,
+  // então o indicador congelou). Em Ontem/Hoje não houve nenhuma ficha com
+  // preço, então o valor é 0.
+  const blocos=[["📶 Total - Consolidado",carrinhoBloco(null,null),"",CARRINHO_CUSTO_FICHA_COM_PRECO_FIXO],
+                ["⬅️ Ontem",carrinhoBloco(ontem,ontem),fDateBR(ontem),0],
+                ["⬇️ Hoje",carrinhoBloco(hoje,hoje),fDateBR(hoje),0]];
+  return blocos.map(([t,m,d,cfp])=>stageResumoCard(`${t}${d?" — "+d:""}`,
       stageRow("Investimento",fBRL(m.spend),"","")+
       stageRow("Fichas com preço",m.fichasComPreco.toLocaleString("pt-BR"),"","")+
-      stageRow("Custo/ficha com preço",m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"--",`Meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false))+
+      stageRow("Custo/ficha com preço",fBRL(cfp),`Meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)}`,metaEmojiGlobal(cfp,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false))+
       stageRow("Fichas totais",m.fichasTotal.toLocaleString("pt-BR"),"","")+
-      stageRow("Custo/ficha total",m.custoFicha!=null?fBRL(m.custoFicha):"--","sem meta definida","")+
+      stageRow("Custo/ficha total",m.custoFicha!=null?fBRL(m.custoFicha):"--",`Meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_TOTAL)}`,metaEmojiGlobal(m.custoFicha,META_CARRINHO_CUSTO_FICHA_TOTAL,false))+
       stageRow("CPC",m.cpc!=null?fBRL(m.cpc):fBRL(0),"","")+
       stageRow("CTR",m.ctr!=null?fPct(m.ctr):fPct(0),"","")+
       stageRow("CPM",m.cpm!=null?fBRL(m.cpm):fBRL(0),"","")+
@@ -4392,15 +4433,15 @@ function carrinhoResumoHtml(){
 }
 function carrinhoResumoText(){
   const hoje=todayISO(), ontem=yesterdayISO();
-  function bloco(titulo,m){
+  function bloco(titulo,m,cfp){
     return `${titulo}
 
 Investimento:\t${fBRL(m.spend)}
 Fichas com preço:\t${m.fichasComPreco.toLocaleString("pt-BR")}
-Custo/ ficha com preço:\t${m.custoFichaComPreco!=null?fBRL(m.custoFichaComPreco):"--"}\t${metaEmojiGlobal(m.custoFichaComPreco,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false)} (meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)})
+Custo/ ficha com preço:\t${fBRL(cfp)}\t${metaEmojiGlobal(cfp,META_CARRINHO_CUSTO_FICHA_COM_PRECO,false)} (meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_COM_PRECO)})
 
 Fichas totais:\t${m.fichasTotal.toLocaleString("pt-BR")}
-Custo/ficha total:\t${m.custoFicha!=null?fBRL(m.custoFicha):"--"}
+Custo/ficha total:\t${m.custoFicha!=null?fBRL(m.custoFicha):"--"}\t${metaEmojiGlobal(m.custoFicha,META_CARRINHO_CUSTO_FICHA_TOTAL,false)} (meta: ${fBRL(META_CARRINHO_CUSTO_FICHA_TOTAL)})
 
 CPC:\t${m.cpc!=null?fBRL(m.cpc):fBRL(0)}
 CTR:\t${m.ctr!=null?fPct(m.ctr):fPct(0)}
@@ -4409,11 +4450,11 @@ Tx conversão formulário:\t${m.txConvForm!=null?fPct(m.txConvForm):fPct(0)}`;
   }
   return `tdo_ago26 | Carrinho
 
-${bloco("Total - Consolidado",carrinhoBloco(null,null))}
+${bloco("Total - Consolidado",carrinhoBloco(null,null),CARRINHO_CUSTO_FICHA_COM_PRECO_FIXO)}
 ---------------------
-${bloco("Ontem\t"+fDateBR(ontem),carrinhoBloco(ontem,ontem))}
+${bloco("Ontem\t"+fDateBR(ontem),carrinhoBloco(ontem,ontem),0)}
 ---------------------
-${bloco("Hoje\t"+fDateBR(hoje),carrinhoBloco(hoje,hoje))}`;
+${bloco("Hoje\t"+fDateBR(hoje),carrinhoBloco(hoje,hoje),0)}`;
 }
 function copyStageResumo(scope,btn){
   let text="";
